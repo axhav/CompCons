@@ -153,6 +153,7 @@ instance Print Type where
 
 instance Print Expr where
   prt i e = case e of
+   ETyped expr type' -> prPrec i 0 (concatD [doc (showString "[") , prt 0 expr , doc (showString ":") , prt 0 type' , doc (showString "]")])
    EVar id -> prPrec i 6 (concatD [prt 0 id])
    ELitInt n -> prPrec i 6 (concatD [prt 0 n])
    ELitDoub d -> prPrec i 6 (concatD [prt 0 d])

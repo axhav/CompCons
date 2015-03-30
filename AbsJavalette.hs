@@ -53,7 +53,8 @@ data Type =
   deriving (Eq,Ord,Show,Read)
 
 data Expr =
-   EVar Ident
+   ETyped Expr Type
+ | EVar Ident
  | ELitInt Integer
  | ELitDoub Double
  | ELitTrue

@@ -67,6 +67,7 @@ transType x = case x of
 
 transExpr :: Expr -> Result
 transExpr x = case x of
+  ETyped expr type'  -> failure x
   EVar id  -> failure x
   ELitInt n  -> failure x
   ELitDoub d  -> failure x

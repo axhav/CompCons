@@ -28,26 +28,29 @@ import ErrM
   '-' { PT _ (TS _ 11) }
   '--' { PT _ (TS _ 12) }
   '/' { PT _ (TS _ 13) }
-  ';' { PT _ (TS _ 14) }
-  '<' { PT _ (TS _ 15) }
-  '<=' { PT _ (TS _ 16) }
-  '=' { PT _ (TS _ 17) }
-  '==' { PT _ (TS _ 18) }
-  '>' { PT _ (TS _ 19) }
-  '>=' { PT _ (TS _ 20) }
-  'boolean' { PT _ (TS _ 21) }
-  'double' { PT _ (TS _ 22) }
-  'else' { PT _ (TS _ 23) }
-  'false' { PT _ (TS _ 24) }
-  'if' { PT _ (TS _ 25) }
-  'int' { PT _ (TS _ 26) }
-  'return' { PT _ (TS _ 27) }
-  'true' { PT _ (TS _ 28) }
-  'void' { PT _ (TS _ 29) }
-  'while' { PT _ (TS _ 30) }
-  '{' { PT _ (TS _ 31) }
-  '||' { PT _ (TS _ 32) }
-  '}' { PT _ (TS _ 33) }
+  ':' { PT _ (TS _ 14) }
+  ';' { PT _ (TS _ 15) }
+  '<' { PT _ (TS _ 16) }
+  '<=' { PT _ (TS _ 17) }
+  '=' { PT _ (TS _ 18) }
+  '==' { PT _ (TS _ 19) }
+  '>' { PT _ (TS _ 20) }
+  '>=' { PT _ (TS _ 21) }
+  '[' { PT _ (TS _ 22) }
+  ']' { PT _ (TS _ 23) }
+  'boolean' { PT _ (TS _ 24) }
+  'double' { PT _ (TS _ 25) }
+  'else' { PT _ (TS _ 26) }
+  'false' { PT _ (TS _ 27) }
+  'if' { PT _ (TS _ 28) }
+  'int' { PT _ (TS _ 29) }
+  'return' { PT _ (TS _ 30) }
+  'true' { PT _ (TS _ 31) }
+  'void' { PT _ (TS _ 32) }
+  'while' { PT _ (TS _ 33) }
+  '{' { PT _ (TS _ 34) }
+  '||' { PT _ (TS _ 35) }
+  '}' { PT _ (TS _ 36) }
 
 L_ident  { PT _ (TV $$) }
 L_integ  { PT _ (TI $$) }
@@ -126,6 +129,11 @@ Type : 'int' { Int }
   | 'void' { Void }
 
 
+Expr :: { Expr }
+Expr : Expr1 '||' Expr { EOr $1 $3 } 
+  | Expr1 { $1 }
+
+
 ListType :: { [Type] }
 ListType : {- empty -} { [] } 
   | Type { (:[]) $1 }
@@ -167,11 +175,6 @@ Expr2 : Expr2 RelOp Expr3 { ERel $1 $2 $3 }
 Expr1 :: { Expr }
 Expr1 : Expr2 '&&' Expr1 { EAnd $1 $3 } 
   | Expr2 { $1 }
-
-
-Expr :: { Expr }
-Expr : Expr1 '||' Expr { EOr $1 $3 } 
-  | Expr1 { $1 }
 
 
 ListExpr :: { [Expr] }

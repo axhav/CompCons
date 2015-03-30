@@ -60,6 +60,8 @@ Void.      Type ::= "void" ;
 
 internal   Fun. Type ::= Type "(" [Type] ")" ;
 
+internal   ETyped. Expr ::= "[" Expr ":" Type "]" ;
+
 separator  Type "," ;
 
 -- Expressions ---------------------------------------------

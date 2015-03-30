@@ -44,10 +44,11 @@ The reserved words used in Javalette are the following:
 The symbols used in Javalette are the following:
   | ( | ) | , | {
   | } | ; | = | ++
-  | -- | - | ! | &&
-  | || | + | * | /
-  | % | < | <= | >
-  | >= | == | != | 
+  | -- | [ | : | ]
+  | - | ! | && | ||
+  | + | * | / | %
+  | < | <= | > | >=
+  | == | != |  | 
 
 ===Comments===
 Single-line comments begin with #, //.Multiple-line comments are  enclosed with /* and */.
@@ -89,6 +90,8 @@ All other symbols are terminals.
   |  |  **|**  | ``double`` 
   |  |  **|**  | ``boolean`` 
   |  |  **|**  | ``void`` 
+  | //Expr// | -> | //Expr1// ``||`` //Expr// 
+  |  |  **|**  | //Expr1// 
   | //[Type]// | -> | **eps**
   |  |  **|**  | //Type// 
   |  |  **|**  | //Type// ``,`` //[Type]// 
@@ -111,8 +114,6 @@ All other symbols are terminals.
   |  |  **|**  | //Expr3// 
   | //Expr1// | -> | //Expr2// ``&&`` //Expr1// 
   |  |  **|**  | //Expr2// 
-  | //Expr// | -> | //Expr1// ``||`` //Expr// 
-  |  |  **|**  | //Expr1// 
   | //[Expr]// | -> | **eps**
   |  |  **|**  | //Expr// 
   |  |  **|**  | //Expr// ``,`` //[Expr]// 
