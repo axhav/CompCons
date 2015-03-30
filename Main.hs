@@ -9,6 +9,7 @@ import Control.Monad.Reader
 import AbsJavalette
 import ParJavalette
 import LexJavalette
+import PrintJavalette
 import ErrM
 
 import TypeChecker
@@ -39,7 +40,7 @@ check file s = case pProgram (myLexer s) of
         putStrLn "TYPE ERROR"
         putStrLn err
         exitFailure
-      Ok () -> putStrLn "OK!"
+      Ok a -> putStrLn $ printTree a
       
       
       

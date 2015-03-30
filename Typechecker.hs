@@ -37,11 +37,18 @@ newtype EnvM a = EnvM { unEnv :: StateT Env Err a }
 checkDef :: TopDef -> EnvM TopDef
 checkDef (FnDef t f args bl) = do
     newBlock
-    foldl1 (\ env (Arg t x) -> extendCont' x t) (take 1 args)--extendCont (newBlock env) (head args)
-    loop (drop 1 args) --foldl (\ env (Arg t x) -> checkDupe env x >> extendCont env x t) (newBlock env) args
-    extendCont' (Ident "return") t
-    ret <- (checkBlock bl) 
-    return $ FnDef t f args ret
+    case args of
+        [] -> do
+            extendCont' (Ident "return") t
+            ret <- (checkBlock bl) 
+            return $ FnDef t f args ret
+     
+        ((Arg t x):xs)-> do
+            extendCont' x t   --extendCont (newBlock env) (head args)
+            loop (drop 1 args) --foldl (\ env (Arg t x) -> checkDupe env x >> extendCont env x t) (newBlock env) args
+            extendCont' (Ident "return") t
+            ret <- (checkBlock bl) 
+            return $ FnDef t f args ret
     
     where loop [] = return ()
           loop ((Arg t x):ars) =  do
@@ -236,7 +243,7 @@ lookDef f =EnvM $ do
         Nothing -> fail $ "undefined function " ++ printTree f
         Just t  -> return t
 -- adds a new function definition to the environment if it does not allready exist
-extendSig :: Env ->  TopDef -> EnvM Env
+extendSig :: Env ->  TopDef -> Err Env
 extendSig env@Env{ envSig = sig } (FnDef t f args _ss) = do
     if Map.member f sig then fail $ "duplicate definition of function " ++ printTree f else return env { envSig = Map.insert f ft (envSig env) }
     where ft = FunType t $ map (\ (Arg t _x) -> t) args
@@ -265,7 +272,7 @@ emptyEnv = Env { envSig = Map.empty, envCont = [Map.empty] }
 
     
 -- typechecks the program 
-typecheck :: Program -> EnvM Program
+typecheck :: Program -> Err Program
 typecheck (Program defs) = do
     let env0 = Env{ envSig = Map.fromList [(Ident "printInt", FunType Void [Int]),
             (Ident "printDouble", FunType Void [Doub]),(Ident "readInt", FunType Int [])
@@ -273,6 +280,13 @@ typecheck (Program defs) = do
         , envCont = []
         }
     env <- foldM extendSig env0 defs 
-    put env
-    ret <- (mapM checkDef defs)
-    return $ Program ret
+    --(a,env') <- runStateT checkDef defs env 
+    
+    --ret <- checkDef env defs
+    return $ Program (help env defs)
+
+help :: Env -> [TopDef] -> [TopDef]
+help env [] =  []
+help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
+        Ok a -> (fst a): help (snd a) defs
+        Bad m -> fail m 
