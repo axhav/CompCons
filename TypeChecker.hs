@@ -44,8 +44,8 @@ checkDef (FnDef t f args bl) = do
         [] -> do
             ret <- (checkBlock bl) 
             return $ FnDef t f args ret  
-        ((Arg t x):xs)-> do
-            extendCont x t   --extendCont (newBlock env) (head args)
+        ((Arg t' x):xs)-> do
+            extendCont x t'   --extendCont (newBlock env) (head args)
             loop (drop 1 args) --foldl (\ env (Arg t x) -> checkDupe env x >> extendCont env x t) (newBlock env) args
             ret <- (checkBlock bl) 
             
@@ -241,7 +241,6 @@ checkDupe i = EnvM $ do
 lookVar :: Ident -> EnvM Type
 lookVar x = EnvM $do
     env <- gets envCont 
-    fail $ show env
     case catMaybes $ map (Map.lookup x) (env) of
         []      -> fail $ "unbound variable " ++ printTree x
         (t : _) -> return t
@@ -296,7 +295,7 @@ typecheck (Program defs) = do
         , envCont = []
         }
     env <- foldM extendSig env0 defs 
-<<<<<<< HEAD:Typechecker.hs
+
     --(a,env') <- runStateT checkDef defs env 
     --ret <- checkDef env defs
     ret' <- (help env defs)
@@ -309,24 +308,5 @@ help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
             b <- help (snd a) defs
             return $ (fst a): b
         Bad m ->  fail m
-=======
-    let result = help env defs
-    case result of
-        Ok a -> return $ Program (help' env defs) --TODO FIX THIS, should not check everyting again :(
-        Bad m -> fail m
     
--- 
-help :: Env -> [TopDef] -> Err [TopDef]
-help env [] =  return []
-help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
-        Ok a -> do 
-            return $ (fst a) 
-            help (snd a) defs
-        Bad m -> fail m
-
-help' :: Env -> [TopDef] -> [TopDef]
-help' env [] =  []
-help' env (def:defs) = case runStateT (unEnv (checkDef def)) env of
-        Ok a -> (fst a): help' (snd a) defs
-        Bad m -> fail m
->>>>>>> 9f15f24844d7428c0ff0c2635db70486437530c2:TypeChecker.hs
+    
