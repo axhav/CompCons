@@ -38,23 +38,21 @@ newtype EnvM a = EnvM { unEnv :: StateT Env Err a }
 checkDef :: TopDef -> EnvM TopDef
 checkDef (FnDef t f args bl) = do
     newBlock
+    extendCont (Ident "return") t
     case args of
         [] -> do
-            extendCont' (Ident "return") t
             ret <- (checkBlock bl) 
-            return $ FnDef t f args ret
-     
+            return $ FnDef t f args ret  
         ((Arg t x):xs)-> do
-            extendCont' x t   --extendCont (newBlock env) (head args)
+            extendCont x t   --extendCont (newBlock env) (head args)
             loop (drop 1 args) --foldl (\ env (Arg t x) -> checkDupe env x >> extendCont env x t) (newBlock env) args
-            extendCont' (Ident "return") t
             ret <- (checkBlock bl) 
             return $ FnDef t f args ret
     
     where loop [] = return ()
           loop ((Arg t x):ars) =  do
                         checkDupe x
-                        extendCont' x t
+                        extendCont x t
                         loop ars 
           
 -- Checks input block              
@@ -128,19 +126,19 @@ checkStm s = case s of
 loopHelper:: Type -> [Item] -> EnvM ()
 loopHelper t [(NoInit x)] = do
     checkDupe x
-    extendCont' x t
+    extendCont x t
 loopHelper t [(Init x expr)] = do
     checkDupe x
     inferExp expr
-    extendCont' x t    
+    extendCont x t    
 loopHelper t ((NoInit x):xs) = do
     checkDupe x 
-    extendCont' x t
+    extendCont x t
     loopHelper t xs 
 loopHelper t ((Init x expr ):xs) =  do
     checkDupe x 
     inferExp expr
-    extendCont' x t
+    extendCont x t
     loopHelper t xs
     
 -- Checks experssion
@@ -191,10 +189,11 @@ inferExp e = case e of
         return (ETyped  (EAnd e1' e2') t)
     (EOr e1 e2)     -> do
         (e1',e2',t) <- binaryNum e1 e2 [Bool]
-        return (ETyped  (EAnd e1' e2') t)
+        return (ETyped  (EOr e1' e2') t)
     
     
--- Used to compare the type of numerical expression and makes it return the type of the inputted ones
+-- Used to compare the type of numerical expression and makes it 
+-- return the type of the inputted ones
 binaryNum :: Expr -> Expr -> [Type] -> EnvM (Expr, Expr ,Type)
 binaryNum e1 e2 ts = do
     ETyped e1' t1 <- inferExp e1
@@ -226,7 +225,7 @@ checkDupe i = EnvM $ do
     env <- get
     let env'@Env{envCont = b:bs} = env
     case Map.lookup i b of
-        Just a -> fail $ "Variable already in scope " ++ printTree i ++ "  " ++ show b
+        Just a -> fail $ "Variable" ++ printTree i ++ " already in scope " ++ show b
         Nothing -> return ()
     
 -- Checks the environment if a variable exists
@@ -254,11 +253,11 @@ extendSig env@Env{ envSig = sig } (FnDef t f args _ss) = do
     where ft = FunType t $ map (\ (Arg t _x) -> t) args
 
 -- Adds a new id to the current context of the environment
-extendCont :: Env -> Ident -> Type -> Env
-extendCont env@Env{ envCont = b : bs } x t = env { envCont = Map.insert x t b : bs }
+--extendCont :: Env -> Ident -> Type -> Env
+--extendCont env@Env{ envCont = b : bs } x t = env { envCont = Map.insert x t b : bs }
 
-extendCont' :: Ident -> Type -> EnvM ()
-extendCont' x t = EnvM $ do
+extendCont :: Ident -> Type -> EnvM ()
+extendCont x t = EnvM $ do
     env@Env{ envCont = b : bs } <- get
     put env {envCont = Map.insert x t b : bs }
 
@@ -287,11 +286,22 @@ typecheck (Program defs) = do
         , envCont = []
         }
     env <- foldM extendSig env0 defs 
-    return $ Program (help env defs)
-
+    let result = help env defs
+    case result of
+        Ok a -> return $ Program (help' env defs) --TODO FIX THIS, should not check everyting again :(
+        Bad m -> fail m
+    
 -- 
-help :: Env -> [TopDef] -> [TopDef]
-help env [] =  []
+help :: Env -> [TopDef] -> Err [TopDef]
+help env [] =  return []
 help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
-        Ok a -> (fst a): help (snd a) defs
-        Bad m -> fail m 
+        Ok a -> do 
+            return $ (fst a) 
+            help (snd a) defs
+        Bad m -> fail m
+
+help' :: Env -> [TopDef] -> [TopDef]
+help' env [] =  []
+help' env (def:defs) = case runStateT (unEnv (checkDef def)) env of
+        Ok a -> (fst a): help' (snd a) defs
+        Bad m -> fail m
