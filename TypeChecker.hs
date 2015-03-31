@@ -233,7 +233,7 @@ checkDupe i = EnvM $ do
     env <- get
     let env'@Env{envCont = b:bs} = env
     case Map.lookup i b of
-        Just a -> fail $ "Variable" ++ printTree i ++ " already in scope " ++ show b
+        Just a -> fail $ "Variable " ++ printTree i ++ " already in scope " ++ show b
         Nothing -> return ()
     
 -- Checks the environment if a variable exists
@@ -243,6 +243,7 @@ lookVar x = EnvM $do
     case catMaybes $ map (Map.lookup x) (env) of
         []      -> fail $ "unbound variable " ++ printTree x
         (t : _) -> return t
+
 -- Checks the function definitions if a function exists                            
 lookDef ::Ident -> EnvM FunType
 lookDef f =EnvM $ do
@@ -250,6 +251,7 @@ lookDef f =EnvM $ do
     case Map.lookup f ( env) of
         Nothing -> fail $ "undefined function " ++ printTree f
         Just t  -> return t
+
 -- Adds a new function definition to the environment 
 -- if it does not allready exist
 extendSig :: Env ->  TopDef -> Err Env
@@ -261,9 +263,6 @@ extendSig env@Env{ envSig = sig } (FnDef t f args _ss) = do
     where ft = FunType t $ map (\ (Arg t _x) -> t) args
 
 -- Adds a new id to the current context of the environment
---extendCont :: Env -> Ident -> Type -> Env
---extendCont env@Env{ envCont = b : bs } x t = env { envCont = Map.insert x t b : bs }
-
 extendCont :: Ident -> Type -> EnvM ()
 extendCont x t = EnvM $ do
     env@Env{ envCont = b : bs } <- get
@@ -280,6 +279,7 @@ exitBlock :: EnvM ()
 exitBlock = EnvM $ do
     env@Env { envCont = b : bs }<- get
     put $ env { envCont = bs }
+
 -- Creates an empty envoronment 
 emptyEnv :: Env
 emptyEnv = Env { envSig = Map.empty, envCont = [Map.empty] }
@@ -294,11 +294,8 @@ typecheck (Program defs) = do
         , envCont = []
         }
     env <- foldM extendSig env0 defs 
-
-    --(a,env') <- runStateT checkDef defs env 
-    --ret <- checkDef env defs
-    ret' <- (help env defs)
-    return $ Program ret'
+    ret <- (help env defs)
+    return $ Program ret
 
 help :: Env -> [TopDef] -> Err [TopDef]
 help env [] = return []
