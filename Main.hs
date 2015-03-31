@@ -40,7 +40,9 @@ check file s = case pProgram (myLexer s) of
         putStrLn "TYPE ERROR"
         putStrLn err
         exitFailure
-      Ok a -> putStrLn $ printTree a
+      Ok a -> do 
+        putStrLn "OK!"
+        putStrLn $ printTree a
       
       
       

@@ -9,6 +9,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Control.Monad
 import Control.Monad.State
+import Control.Monad.Trans
 import Data.Functor
 import Data.Maybe
 
@@ -48,6 +49,7 @@ checkDef (FnDef t f args bl) = do
             loop (drop 1 args) --foldl (\ env (Arg t x) -> checkDupe env x >> extendCont env x t) (newBlock env) args
             extendCont' (Ident "return") t
             ret <- (checkBlock bl) 
+            
             return $ FnDef t f args ret
     
     where loop [] = return ()
@@ -77,7 +79,8 @@ checkStm s = case s of
 
     (Ass id expr) ->  do
         t <- lookVar id
-        ret@(ETyped e t') <- inferExp expr
+        
+        ret@(ETyped e t') <- inferExp expr           
         unless (t == t') $ fail $
             "expected numeric type, but found " ++ printTree t ++
             " when checking " ++ printTree id
@@ -175,8 +178,12 @@ inferExp e = case e of
                 ts' <- (zipWithM checkExp exprs ts)
                 return (ETyped (EApp id ts') t) 
     (EString str)   -> return (EString str) --  TODO look at this
-    (Neg expr)      -> inferExp expr 
-    (Not expr)      -> inferExp expr
+    (Neg expr)      ->do
+        ret@(ETyped _ t) <- (inferExp expr)
+        return (ETyped (Neg ret) t) 
+    (Not expr)      -> do
+        ret@(ETyped _ t) <- inferExp expr
+        return (ETyped (Not ret) t)
     (EMul e1 op e2) -> do
         (e1', e2',t) <- binaryNum e1 e2 [Int,Doub]
         return (ETyped  (EMul e1' op e2') t)
@@ -185,6 +192,7 @@ inferExp e = case e of
         return (ETyped  (EAdd e1' op e2') t)
     (ERel e1 op e2) -> do
         (e1',e2',t) <- binaryRel e1 e2 op [Int,Doub,Bool] --TODO RM OP: Städa 
+        --fail $ show e1'
         return (ETyped  (ERel e1' op e2') t)
     (EAnd e1 e2)    -> do
         (e1',e2',t) <- binaryNum e1 e2 [Bool]
@@ -209,13 +217,14 @@ binaryNum e1 e2 ts = do
 
 binaryRel :: Expr -> Expr -> RelOp -> [Type] -> EnvM (Expr, Expr ,Type)
 binaryRel e1 e2 op ts = do
-    ETyped e1' t1 <- inferExp e1
-    ETyped e2' t2 <- inferExp e2
+    exp1@(ETyped e1' t1) <- inferExp e1
+    exp2@(ETyped e2' t2) <- inferExp e2
+    --fail $ printTree exp1 ++ "    " ++ printTree exp2
     unless (t1 == t2) $ fail $
             "expected type " ++ printTree t1 ++ " but found type " ++ printTree t2
     unless (t1 `elem` ts)  $ fail $
             "expected numeric type, but found " ++ printTree t1 ++
-            " when checking " ++ printTree e1 ++ " and "++ printTree e2
+            " when checking " ++ printTree exp1 ++ " and "++ printTree exp2
     return (e1',e2', Bool)
     
 
@@ -232,6 +241,7 @@ checkDupe i = EnvM $ do
 lookVar :: Ident -> EnvM Type
 lookVar x = EnvM $do
     env <- gets envCont 
+    fail $ show env
     case catMaybes $ map (Map.lookup x) (env) of
         []      -> fail $ "unbound variable " ++ printTree x
         (t : _) -> return t
@@ -281,12 +291,14 @@ typecheck (Program defs) = do
         }
     env <- foldM extendSig env0 defs 
     --(a,env') <- runStateT checkDef defs env 
-    
     --ret <- checkDef env defs
-    return $ Program (help env defs)
+    ret' <- (help env defs)
+    return $ Program ret'
 
-help :: Env -> [TopDef] -> [TopDef]
-help env [] =  []
+help :: Env -> [TopDef] -> Err [TopDef]
+help env [] = return []
 help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
-        Ok a -> (fst a): help (snd a) defs
-        Bad m -> fail m 
+        Ok a -> do
+            b <- help (snd a) defs
+            return $ (fst a): b
+        Bad m ->  fail m
