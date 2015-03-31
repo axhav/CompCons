@@ -77,7 +77,6 @@ checkStm s = case s of
         return (Decl t items)
     (Ass id expr) ->  do
         t <- lookVar id
-        
         ret@(ETyped e t') <- inferExp expr           
         unless (t == t') $ fail $
             "expected numeric type, but found " ++ printTree t ++
@@ -132,7 +131,7 @@ loopHelper t [(NoInit x)] = do
     extendCont x t
 loopHelper t [(Init x expr)] = do
     checkDupe x
-    inferExp expr
+    checkExp expr t
     extendCont x t    
 loopHelper t ((NoInit x):xs) = do
     checkDupe x 
@@ -140,7 +139,7 @@ loopHelper t ((NoInit x):xs) = do
     loopHelper t xs 
 loopHelper t ((Init x expr ):xs) =  do
     checkDupe x 
-    inferExp expr
+    checkExp expr t
     extendCont x t
     loopHelper t xs
     
