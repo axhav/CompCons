@@ -109,8 +109,8 @@ checkStm s = case s of
         expr' <- checkExp expr Bool
         newBlock
         stm1' <- checkStm stm1
-        newBlock 
         exitBlock
+        newBlock 
         stm2' <- checkStm stm2
         exitBlock
         return (CondElse expr' stm1' stm2')
