@@ -32,19 +32,19 @@ check :: FilePath -> String -> IO ()
 check file s = case pProgram (myLexer s) of
   Bad err  -> do
     hPutStrLn stderr "ERROR"
-    --putStrLn "SYNTAX ERROR"
-    --putStrLn err
+    putStrLn "SYNTAX ERROR"
+    putStrLn err
     exitWith $ ExitFailure 1
   Ok tree -> do
     case typecheck tree of
       Bad err -> do
         hPutStrLn stderr "ERROR"
-        --putStrLn "TYPE ERROR"
-        --putStrLn err
+        putStrLn "TYPE ERROR"
+        putStrLn err
         exitWith $ ExitFailure 1
       Ok a -> do 
         hPutStrLn stderr "OK"
-        --putStrLn "OK"
+        putStrLn "OK"
         putStrLn $ printTree a
         exitWith $ ExitSuccess
       
