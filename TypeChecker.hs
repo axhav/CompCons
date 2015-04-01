@@ -17,6 +17,7 @@ import Data.Maybe
 data Env = Env {
     envSig :: Sig
     ,envCont :: Cont
+    ,returnOk :: Bool
     }
 -- Defines a map between function ids and function types
 type Sig = Map.Map Ident FunType
@@ -97,22 +98,43 @@ checkStm s = case s of
     (Ret expr) -> do
         rtype <- lookVar (Ident "return")
         expr' <- checkExp expr rtype
+        setReturn True
         return (Ret expr')
-    (VRet) -> return (VRet)
+    (VRet) -> do
+        rtype <- lookVar (Ident "return")
+        unless (rtype == Void) $ fail "Empty return statement"
+        return (VRet)
     (Cond expr stm) -> do
+        preret <- getReturn
         expr' <- checkExp expr Bool
         newBlock
         stm'<- checkStm stm
         exitBlock
+        postret <- getReturn
+        case expr' of
+            ETyped (ELitTrue) _ -> do
+                setReturn (preret || postret)
+            _                   ->
+                setReturn preret
         return (Cond expr' stm')
     (CondElse expr stm1 stm2) -> do
+        preret <- getReturn
         expr' <- checkExp expr Bool
         newBlock
         stm1' <- checkStm stm1
         exitBlock
+        postret1 <- getReturn
         newBlock 
         stm2' <- checkStm stm2
         exitBlock
+        postret2 <- getReturn
+        case expr' of
+            ETyped (ELitTrue) _ -> do
+                setReturn (preret || postret1)
+            ETyped (ELitFalse) _ -> do
+                setReturn (preret || postret2)
+            _                   ->
+                setReturn (preret || (postret1 && postret2))
         return (CondElse expr' stm1' stm2')
     (While expr stm) -> do
         expr' <- checkExp expr Bool
@@ -279,10 +301,23 @@ exitBlock :: EnvM ()
 exitBlock = EnvM $ do
     env@Env { envCont = b : bs }<- get
     put $ env { envCont = bs }
+    
+    
+setReturn :: Bool -> EnvM()
+setReturn b = EnvM $ do 
+    env <- get
+    put $ env {returnOk = b}
 
+
+    
+getReturn :: EnvM Bool
+getReturn = EnvM $ do
+    ret <- gets returnOk
+    return ret
+    
 -- Creates an empty envoronment 
 emptyEnv :: Env
-emptyEnv = Env { envSig = Map.empty, envCont = [Map.empty] }
+emptyEnv = Env { envSig = Map.empty, envCont = [Map.empty], returnOk = False }
 
     
 -- Typechecks the program 
@@ -292,6 +327,7 @@ typecheck (Program defs) = do
             (Ident "printDouble", FunType Void [Doub]),(Ident "readInt", FunType Int [])
             ,(Ident "readDouble", FunType Doub [])]--,(Ident "printString",FunType Void [EString ""])]
         , envCont = []
+        ,returnOk = False
         }
     env <- foldM extendSig env0 defs 
     ret <- (help env defs)
@@ -301,8 +337,19 @@ help :: Env -> [TopDef] -> Err [TopDef]
 help env [] = return []
 help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
         Ok a -> do
-            b <- help (snd a) defs
-            return $ (fst a): b
+            let ((FnDef t id _args _block),env@Env{returnOk = ret}) = a 
+            case t of 
+                Void -> do
+                    b <- help (env{returnOk = False}) defs
+                    return $ (fst a): b
+                _    -> do
+                    case ret of
+                        False -> fail $ "No return statement found in function " ++ printTree id
+                        True  -> do
+                            b <- help (env{returnOk = False}) defs
+                            return ( (fst a): b )
         Bad m ->  fail m
     
-    
+    {-
+lift' :: EnvM a -> Err a
+lift' a = unEnv a-}
