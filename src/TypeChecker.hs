@@ -137,10 +137,17 @@ checkStm s = case s of
                 setReturn (preret || (postret1 && postret2))
         return (CondElse expr' stm1' stm2')
     (While expr stm) -> do
+        preret <- getReturn
         expr' <- checkExp expr Bool
         newBlock
         stm' <- checkStm stm 
-        exitBlock 
+        exitBlock
+        postret <- getReturn 
+        case expr' of
+            ETyped (ELitTrue) _ -> do
+                setReturn (preret || postret)
+            _                   ->
+                setReturn (preret)
         return  (While expr' stm') 
     (SExp expr) -> do 
         e <- (inferExp expr)
@@ -204,36 +211,55 @@ inferExp e = case e of
         ret@(ETyped _ t) <- inferExp expr
         return (ETyped (Not ret) t)
     (EMul e1 op e2) -> do
-        (e1', e2',t) <- binaryNum e1 e2 [Int,Doub]
+        (e1', e2',t) <- binaryNum e1 e2 op [Int,Doub]
         return (ETyped  (EMul e1' op e2') t)
     (EAdd e1 op e2) -> do
-        (e1',e2',t) <- binaryNum e1 e2 [Int,Doub]
+        (e1',e2',t) <- binaryNum' e1 e2 [Int,Doub]
         return (ETyped  (EAdd e1' op e2') t)
     (ERel e1 op e2) -> do
         (e1',e2',t) <- binaryRel e1 e2 op [Int,Doub,Bool] --TODO RM OP: Städa 
         --fail $ show e1'
         return (ETyped  (ERel e1' op e2') t)
     (EAnd e1 e2)    -> do
-        (e1',e2',t) <- binaryNum e1 e2 [Bool]
+        (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EAnd e1' e2') t)
     (EOr e1 e2)     -> do
-        (e1',e2',t) <- binaryNum e1 e2 [Bool]
+        (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EOr e1' e2') t)
     
-    
+
 -- Used to compare the type of numerical expression and makes it 
 -- return the type of the inputted ones
-binaryNum :: Expr -> Expr -> [Type] -> EnvM (Expr, Expr ,Type)
-binaryNum e1 e2 ts = do
-    ETyped e1' t1 <- inferExp e1
-    ETyped e2' t2 <- inferExp e2
+binaryNum :: Expr -> Expr -> MulOp -> [Type] -> EnvM (Expr, Expr ,Type)
+binaryNum e1 e2 op ts = do
+    exp1@(ETyped e1' t1) <- inferExp e1
+    exp2@(ETyped e2' t2) <- inferExp e2
+    when (op== Mod && not (t1 == Int)) $ fail $
+            "Operator " ++ printTree op++ " expected type Int but found type " ++ printTree t1
     unless (t1 == t2) $ fail $
             "expected type " ++ printTree t1 ++ " but found type " ++ printTree t2
         
     unless (t1 `elem` ts)  $ fail $
             "expected numeric type, but found " ++ printTree t1 ++
             " when checking " ++ printTree e1 ++ " and "++ printTree e2
-    return  (e1',e2', t1) 
+    return  (exp1,exp2, t1)
+    
+-- Used to compare the type of numerical expression and makes it 
+-- return the type of the inputted ones
+binaryNum' :: Expr -> Expr -> [Type] -> EnvM (Expr, Expr ,Type)
+binaryNum' e1 e2 ts = do
+    exp1@(ETyped e1' t1) <- inferExp e1
+    exp2@(ETyped e2' t2) <- inferExp e2
+    unless (t1 == t2) $ fail $
+            "expected type " ++ printTree t1 ++ " but found type " ++ printTree t2
+        
+    unless (t1 `elem` ts)  $ fail $
+            "expected numeric type, but found " ++ printTree t1 ++
+            " when checking " ++ printTree e1 ++ " and "++ printTree e2
+    return  (exp1,exp2, t1) 
+
+    
+
 
 binaryRel :: Expr -> Expr -> RelOp -> [Type] -> EnvM (Expr, Expr ,Type)
 binaryRel e1 e2 op ts = do
@@ -245,7 +271,7 @@ binaryRel e1 e2 op ts = do
     unless (t1 `elem` ts)  $ fail $
             "expected numeric type, but found " ++ printTree t1 ++
             " when checking " ++ printTree exp1 ++ " and "++ printTree exp2
-    return (e1',e2', Bool)
+    return (exp1,exp2, Bool)
     
 
 -- Checks the current context to make sure that a 

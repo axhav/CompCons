@@ -45,7 +45,7 @@ check file s = case pProgram (myLexer s) of
       Ok a -> do 
         hPutStrLn stderr "OK"
         --putStrLn "OK"
-        --putStrLn $ printTree a
+        putStrLn $ printTree a
         exitWith $ ExitSuccess
       
       
