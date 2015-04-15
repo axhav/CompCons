@@ -188,6 +188,11 @@ compileBlock (Block ss) = do
     mapM_ compileStm ss
     emit $ raw "}"
 
+getNextReg :: Ident -> Type -> CodeGen (LLVM.Val)
+getNextReg id t = do 
+    extendContext id t
+    (r,_) <- lookUpVar id
+    return r
 
 compileStm :: Stmt -> CodeGen ()
 compileStm s = do
@@ -200,47 +205,62 @@ compileStm s = do
             newBlock 
             compileBlock b
             exitBlock
-        (Decl t x) -> do
-            for x
-            where for (id:[]) = extendContext id t
-                  for (id:ids)= extendContext id t >> for ids
-        (Ass id expr) -> do
-            r1 <- getNextReg
-            compileExp r1 expr
+        (Decl t i) -> do
+            for i
+            where for (item:[]) = declHelper item t
+                  for (item:items)= declHelper item t >> for items
+        (Ass id expr@(ETyped e t)) -> do
+            r1 <- getNextReg id t
+            compileExp r1 expr 
 
-        --TODO more
+        (Incr id) -> do
+            (VVal r1) <- getNextReg
+            (_,t) <- lookUpVar id
+            emit $ LLVM.Raw $ "%" ++ r1 ++ " = " ++ LLVM.showInstruction $ LLVM.Load $ (typeToItype t) (showReg id)
+            (VVal r2) <- getNextReg
+            emit $ LLVM.Raw $ "%" ++ r2 ++ " = " ++ LLVM.showInstruction $ LLVM.Add $ (typeToItype t) r1 (VInt 1) 
+            emit $ LLVM.Store $ (typeToItype t) r2 (typeToItype t) (showReg id)
+        (Decr id) -> do
 
-        Incr id -> do
-
-        Decr id -> do
-
-        Ret exp -> do
+        (Ret exp) -> do
         
-        VRet -> do
+        (VRet) -> do
 
-        Cond expr stm -> do
+        (Cond expr stm) -> do
 
-        CondElse expr stm1 stm2 -> do
+        (CondElse expr stm1 stm2) -> do
 
-        While expr stm -> do
-        l1 <- getNextLabel
-        l2 <- getNextLabel
-        r  <- getNextReg
-        emit $ LLVM.Raw $ "L" ++ show l1 ++ ":"
-        compileExp r expr
+        (While expr stm) -> do
+            l1 <- getNextLabel
+            l2 <- getNextLabel
+            l3 <- getNextLabel
+            r  <- getNextReg
+            emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
+            compileExp r expr
+            emit $ LLVM.CondB (VVal r) l2 l3  
+            emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
+            compileStm stm
+            emit $ LLVM.Goto l1
+            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while     
         
-        
-        SExp expr -> do
+        (SExp expr) -> do
         
  
-
+declHelper :: Item -> Type -> CodeGen ()
+declHelper (NoInit id) t = emit $ LLVM.Raw $ (showReg id) ++ " = " ++ LLVM.showInstruction $ LLVM.Alloca $ typeToItype t
+declHelper (Init id expr) t = do 
+    emit $ LLVM.Raw $ (showReg id) ++ " = " ++ LLVM.showInstruction $ LLVM.Alloca $ typeToItype t
+    emit $ LLVM.Store $ (typeToItype t) (compileExp expr) (typeToItype t) (showReg id)
+    
+showReg :: Ident -> String
+showReg i = "%" ++ show i
 
 compileExp :: LLVM.Val -> Exp -> CodeGen ()
-compileExp r (ETyped (ELitTrue) t) = emit $ raw "i1 1"
-compileExp r (ETyped (ELitFalse) t) = emit $ raw "i1 0"
-compileExp r (ETyped (ELitInt i) t) = emit $ raw "i32 " ++ show i
-compileExp r (ETyped (ELitDoub d) t) = emit $ raw "double " show d
-compileExp r (ETyped (EVar id) t) = do
+compileExp (VVal r) (ETyped (ELitTrue) t) = emit $ LLVM.Raw r ++ " = i1 1"
+compileExp (VVal r) (ETyped (ELitFalse) t) = emit $ LLVM.Raw r ++ "i1 0"
+compileExp (VVal r) (ETyped (ELitInt i) t) = emit $ LLVM.Raw r ++ "i32 " ++ show i
+compileExp (VVal r) (ETyped (ELitDoub d) t) = emit $ LLVM.Raw r ++ "double " show d
+compileExp (VVal r) (ETyped (EVar id) t) = do
     (a,_) <- lookupVar id
     e
 
