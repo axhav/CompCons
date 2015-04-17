@@ -74,8 +74,8 @@ checkStm s = case s of
         exitBlock
         return (BStmt b')  
     (Decl t items) -> do
-        loopHelper t items
-        return (Decl t items)
+        retItems<- loopHelper t items
+        return (Decl t retItems)
     (Ass id expr) ->  do
         t <- lookVar id
         ret@(ETyped e t') <- inferExp expr           
@@ -154,23 +154,27 @@ checkStm s = case s of
         return (SExp e )
     
 -- Help function for statment Decl
-loopHelper:: Type -> [Item] -> EnvM ()
+loopHelper:: Type -> [Item] -> EnvM [Item]
 loopHelper t [(NoInit x)] = do
     checkDupe x
     extendCont x t
+    return [NoInit x]
 loopHelper t [(Init x expr)] = do
     checkDupe x
-    checkExp expr t
-    extendCont x t    
+    e' <- checkExp expr t
+    extendCont x t
+    return [Init x e']  
 loopHelper t ((NoInit x):xs) = do
     checkDupe x 
     extendCont x t
-    loopHelper t xs 
-loopHelper t ((Init x expr ):xs) =  do
+    retVal <- loopHelper t xs
+    return $ (NoInit x) : retVal 
+loopHelper t ((Init x expr):xs) =  do
     checkDupe x 
-    checkExp expr t
+    e'<- checkExp expr t
     extendCont x t
-    loopHelper t xs
+    retVal <- loopHelper t xs
+    return $ (Init x e') : retVal
     
 -- Checks experssion
 checkExp :: Expr -> Type -> EnvM Expr

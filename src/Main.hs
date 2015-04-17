@@ -13,6 +13,7 @@ import PrintJavalette
 import ErrM
 
 import TypeChecker
+import CodeGen
 
 
 
@@ -43,9 +44,14 @@ check file s = case pProgram (myLexer s) of
         putStrLn err
         exitWith $ ExitFailure 1
       Ok a -> do 
-        hPutStrLn stderr "OK"
-        putStrLn "OK"
         putStrLn $ printTree a
+        let name = takeBaseName file
+        let code = codeGen name a
+        let llvmfile = replaceExtension file ".ll"
+        writeFile llvmfile code
+        hPutStrLn stderr "OK"
+        --putStrLn "OK"
+        
         exitWith $ ExitSuccess
       
       
