@@ -25,6 +25,7 @@ data Instruction
     | And Size Val Val
     | Or Size Val Val
     | Return Size Val
+    | VReturn Size
     | Goto Label
     | CondB Val Label Label
     | Comment String
@@ -44,6 +45,7 @@ showInstruction (Compare c s v1 v2) = "icmp " ++ show c ++ " " ++ show s ++ " " 
 showInstruction (And s v1 v2)       = "and " ++ show s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Or s v1 v2)        = "or " ++ show s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Return s v)        = "ret " ++ show s ++ " " ++ show v
+showInstruction (VReturn)           = "ret void"
 showInstruction (Goto l)            = "br " ++ show l
 showInstruction (CondB v l1 l2)     = "br i1 " ++ show v ++ " , " ++ show l1 ++ " , " ++ show l2
 showInstruction (Comment s)         = ";" ++ s

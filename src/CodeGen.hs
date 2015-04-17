@@ -188,6 +188,7 @@ compileBlock (Block ss) = do
     mapM_ compileStm ss
     emit $ raw "}"
 
+-- Return next free reg id
 getNextReg :: Ident -> Type -> CodeGen (LLVM.Val)
 getNextReg id t = do 
     extendContext id t
@@ -212,24 +213,50 @@ compileStm s = do
         (Ass id expr@(ETyped e t)) -> do
             r1 <- getNextReg id t
             compileExp r1 expr 
-
         (Incr id) -> do
             (VVal r1) <- getNextReg
             (_,t) <- lookUpVar id
-            emit $ LLVM.Raw $ "%" ++ r1 ++ " = " ++ LLVM.showInstruction $ LLVM.Load $ (typeToItype t) (showReg id)
+            emit $ LLVM.Raw $ "%" ++ r1 ++ " = " ++ LLVM.showInstruction $ LLVM.Load $ (typeToItype t) (showReg id) -- Load id into reg 
             (VVal r2) <- getNextReg
-            emit $ LLVM.Raw $ "%" ++ r2 ++ " = " ++ LLVM.showInstruction $ LLVM.Add $ (typeToItype t) r1 (VInt 1) 
-            emit $ LLVM.Store $ (typeToItype t) r2 (typeToItype t) (showReg id)
+            emit $ LLVM.Raw $ "%" ++ r2 ++ " = " ++ LLVM.showInstruction $ LLVM.Add $ (typeToItype t) r1 (VInt 1) -- Inc by one
+            emit $ LLVM.Store $ (typeToItype t) r2 (typeToItype t) (showReg id) -- Store the inc value into id
         (Decr id) -> do
-
-        (Ret exp) -> do
-        
+            (VVal r1) <- getNextReg
+            (_,t) <- lookUpVar id
+            emit $ LLVM.Raw $ "%" ++ r1 ++ " = " ++ LLVM.showInstruction $ LLVM.Load $ (typeToItype t) (showReg id) -- Load id into reg 
+            (VVal r2) <- getNextReg
+            emit $ LLVM.Raw $ "%" ++ r2 ++ " = " ++ LLVM.showInstruction $ LLVM.Sub $ (typeToItype t) r1 (VInt 1) -- Dec by one
+            emit $ LLVM.Store $ (typeToItype t) r2 (typeToItype t) (showReg id) -- Store the dec value into id
+        (Ret expr@(ETyped e t)) -> do
+            case e of 
+                (EVar id)   ->
+                    emit $ LLVM.Return $ (typeToItype t) (showReg id)
+                (_ value)   ->
+                    emit $ LLVM.Return $ (typeToItype t) value
         (VRet) -> do
-
+            emit $ LLVM.VReturn
         (Cond expr stm) -> do
-
+            l1 <- getNextLabel
+            l2 <- getNextLabel
+            r <- getNextReg
+            compileExp r expr -- Calculate condition
+            emit $ LLVM.CondB (VVal r) l1 l2 -- Jump check
+            emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label to enter if-statment
+            compileStm stm
+            emit $ LLVM.Raw $ "L" + show l2 ++ ":" -- Label outside if-statment
         (CondElse expr stm1 stm2) -> do
-
+            l1 <- getNextLabel
+            l2 <- getNextLabel
+            l3 <- getNextLabel
+            r <- getNextReg
+            compileExp r expr -- Calculate condition
+            emit $ LLVM.CondB (VVal r) l1 l2 -- Jump check
+            emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label to enter first stm
+            compileStm stm
+            emit $ LLVM.Goto l3
+            emit $ LLVM.Raw $ "L" + show l2 ++ ":" -- Label to enter snd stm
+            compileStm stm
+            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out side if-statment
         (While expr stm) -> do
             l1 <- getNextLabel
             l2 <- getNextLabel
@@ -241,19 +268,21 @@ compileStm s = do
             emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
             compileStm stm
             emit $ LLVM.Goto l1
-            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while     
-        
+            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while          
         (SExp expr) -> do
+            compileExp expr
         
- 
+-- Helps declar to decide if variable is Init or not 
 declHelper :: Item -> Type -> CodeGen ()
 declHelper (NoInit id) t = emit $ LLVM.Raw $ (showReg id) ++ " = " ++ LLVM.showInstruction $ LLVM.Alloca $ typeToItype t
 declHelper (Init id expr) t = do 
     emit $ LLVM.Raw $ (showReg id) ++ " = " ++ LLVM.showInstruction $ LLVM.Alloca $ typeToItype t
     emit $ LLVM.Store $ (typeToItype t) (compileExp expr) (typeToItype t) (showReg id)
-    
+
+-- Show the correct format for a register from Ident    
 showReg :: Ident -> String
 showReg i = "%" ++ show i
+
 
 compileExp :: LLVM.Val -> Exp -> CodeGen ()
 compileExp (VVal r) (ETyped (ELitTrue) t) = emit $ LLVM.Raw r ++ " = i1 1"
@@ -262,8 +291,16 @@ compileExp (VVal r) (ETyped (ELitInt i) t) = emit $ LLVM.Raw r ++ "i32 " ++ show
 compileExp (VVal r) (ETyped (ELitDoub d) t) = emit $ LLVM.Raw r ++ "double " show d
 compileExp (VVal r) (ETyped (EVar id) t) = do
     (a,_) <- lookupVar id
-    e
-
+    e --TODO conti
+compileExp (VVal r) (ETyped (EApp id exps) t) = 
+compileExp (VVal r) (ETyped (EString s) t) =
+compileExp (VVal r) (ETyped (Neq e) t) =
+compileExp (VVal r) (ETyped (Not e) t) =  
+compileExp (VVal r) (ETyped (EMul e1 o e2) t) =
+compileExp (VVal r) (ETyped (EAdd e1 o e2) t) =
+compileExp (VVal r) (ETyped (ERel e1 o e2) t) =
+compileExp (VVal r) (ETyped (EAnd e1 e2) t) =
+compileExp (VVal r) (ETyped (EOr e1 e2) t) =
             
 
 
