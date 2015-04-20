@@ -31,6 +31,7 @@ data Instruction
     | Add Size Val Val
     | Sub Size Val Val
     | Neg Size Val
+    | Mod Size Val Val
     | Compare Cond Size Val Val
     | And Size Val Val
     | Or Size Val Val
@@ -54,6 +55,7 @@ showInstruction (Div s v1 v2)       = "div " ++ showSize s ++ " " ++ show v1 ++ 
 showInstruction (Add s v1 v2)       = "add " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Sub s v1 v2)       = "sub " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Neg s v)           = "sub " ++ showSize s ++ " 0, " ++ show v
+showInstruction (Mod s v1 v2)       = "srem " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Compare c s v1 v2) = "icmp " ++ [toLower (head (show c))] ++ tail (show c) ++ " " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (And s v1 v2)       = "and " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Or s v1 v2)        = "or " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2

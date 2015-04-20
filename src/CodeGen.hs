@@ -429,7 +429,10 @@ compileExp (ETyped (EMul e1 o e2) t) = do
             r <- getNextTempReg 
             emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) e1' e2')) 
             return r
-        Mod -> undefined -- TODO Add later
+        Mod -> do 
+            r <- getNextTempReg 
+            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Mod (typeToItype t) e1' e2')) 
+            return r
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
