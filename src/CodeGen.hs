@@ -189,6 +189,7 @@ compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
     newBlock     
     args' <- showA args
     emit $ LLVM.Raw $ "define " ++ LLVM.showSize (typeToItype t) ++ " @"++ id ++ "(" ++ args' ++ ") {"
+    allocateArgs args
     case t of
          Void -> do
             let b = Block (ss ++ [VRet])
@@ -211,13 +212,13 @@ showA :: [Arg] -> CodeGen String
 showA []           = return ""
 showA ([Arg t id]) = do
     extendContext id t
-    r <- getVarReg id
-    return $ LLVM.showSize (typeToItype t) ++ " " ++ show r
+    --r <- getVarReg id
+    return $ LLVM.showSize (typeToItype t) ++ " %" ++ printTree id
 showA ((Arg t id):ids) = do
     extendContext id t
-    r <- getVarReg id
+    --r <- getVarReg id
     temp <- showA ids
-    return $ LLVM.showSize (typeToItype t) ++ " " ++ show r ++ " , " ++ temp
+    return $ LLVM.showSize (typeToItype t) ++ " %" ++ printTree id ++ " , " ++ temp
 
 showE :: [Type] -> [LLVM.Val] ->  String
 showE _ []              = "" 
@@ -227,6 +228,18 @@ showE [t] ([LLVM.VDoub d]) = (LLVM.showSize (typeToItype t)) ++ " " ++ show d
 showE (t:ts) ((LLVM.VVal s):ss) = (LLVM.showSize (typeToItype t)) ++ " " ++ s ++ " , " ++ showE ts ss
 showE (t:ts) ((LLVM.VInt i):is) = (LLVM.showSize (typeToItype t)) ++ " " ++ show i ++ " , " ++ showE ts is
 showE (t:ts) ((LLVM.VDoub d):ds) = (LLVM.showSize (typeToItype t)) ++ " " ++ show d ++ " , " ++ showE ts ds
+
+allocateArgs :: [Arg] -> CodeGen ()
+allocateArgs [] = return ()
+allocateArgs [Arg t id] = do
+    r <- getVarReg id
+    emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+    emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
+allocateArgs ((Arg t id):args) = do
+    r <- getVarReg id
+    emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+    emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
+    allocateArgs args
 
 typeToItype :: Type -> LLVM.Size
 typeToItype Int  = LLVM.Word
@@ -403,7 +416,19 @@ compileExp (ETyped (Neg e) t) = do
     emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Neg (typeToItype t) e'))
     return r 
 --compileExp (VVal r) (ETyped (Not e) t) =  return ""
---compileExp (VVal r) (ETyped (EMul e1 o e2) t) = return ""
+compileExp (ETyped (EMul e1 o e2) t) = do
+    e1' <- compileExp e1
+    e2' <- compileExp e2
+    case o of
+        Times -> do
+            r <- getNextTempReg 
+            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Mul (typeToItype t) e1' e2')) 
+            return r
+        Div -> do
+            r <- getNextTempReg 
+            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) e1' e2')) 
+            return r
+        Mod -> undefined -- TODO Add later
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
