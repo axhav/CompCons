@@ -377,6 +377,8 @@ condHelper expr@(ETyped e t) r = case e of
     ERel e1 o e2 -> do
         expr' <- compileExp expr
         emit $ LLVM.Ass r expr'
+    Not e        -> do
+        condEmiter expr r
     _            -> undefined
 
 -- Adds zero with a value into a register
@@ -416,7 +418,11 @@ compileExp (ETyped (Neg e) t) = do
     r <- getNextTempReg 
     emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Neg (typeToItype t) e'))
     return r 
---compileExp (VVal r) (ETyped (Not e) t) =  return ""
+compileExp (ETyped (Not e) t) = do
+    e' <- compileExp e
+    r <- getNextTempReg
+    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Not e'))
+    return r
 compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
