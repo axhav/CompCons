@@ -379,6 +379,10 @@ condHelper expr@(ETyped e t) r = case e of
         emit $ LLVM.Ass r expr'
     Not e        -> do
         condEmiter expr r
+    EAnd e1 e2   -> do
+        condEmiter expr r
+    EOr e1 e2    -> do
+        condEmiter expr r
     _            -> undefined
 
 -- Adds zero with a value into a register
@@ -456,14 +460,24 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     e2' <- compileExp e2
     case o of 
         LTH -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Slt (typeToItype t) e1' e2' 
-        LE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sle (typeToItype t) e1' e2' --TODO prob wrong
+        LE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sle (typeToItype t) e1' e2' 
         GTH -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sgt (typeToItype t) e1' e2' 
         GE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sge (typeToItype t) e1' e2' 
         EQU -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Equ (typeToItype t) e1' e2' 
         NE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Ne  (typeToItype t) e1' e2' 
---compileExp (VVal r) (ETyped (EAnd e1 e2) t) =return ""
---compileExp (VVal r) (ETyped (EOr e1 e2) t) =return ""
-compileExp a =  fail $ printTree a 
+compileExp (ETyped (EAnd e1 e2) t) = do
+    e1' <- compileExp e1
+    e2' <- compileExp e2
+    r <- getNextTempReg 
+    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.And (typeToItype t) e1' e2')) 
+    return r
+compileExp (ETyped (EOr e1 e2) t) = do
+    e1' <- compileExp e1
+    e2' <- compileExp e2
+    r <- getNextTempReg 
+    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Or (typeToItype t) e1' e2')) 
+    return r
+compileExp a =  fail $ printTree a --TODO rm
             
 
 
