@@ -330,6 +330,7 @@ compileStm s = do
             l2 <- getNextLabel
             l3 <- getNextLabel
             r  <- getNextTempReg
+            emit $ LLVM.Goto l1
             emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
             condHelper expr r
             emit $ LLVM.CondB r l2 l3  
@@ -357,8 +358,8 @@ declHelper (Init id expr) t = do
     emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
 
 -- Show the correct format for a register from Ident    
-showReg :: Ident -> LLVM.Val
-showReg i = LLVM.VVal (printTree i)
+--showReg :: Ident -> LLVM.Val
+--showReg i = LLVM.VVal (printTree i) --TODO rm not in use
 
 -- Helps the condition statmenst to emit right string
 condHelper :: Expr -> LLVM.Val -> CodeGen ()
