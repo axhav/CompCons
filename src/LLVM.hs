@@ -15,7 +15,7 @@ instance Show Val where
 
 type Label = Int
 type Var = String
-data Cond = Equ | Ne | Ugt | Uge | Ult | Ule | Sgt | Sge | Slt | Sle
+data Cond = Eq | Ne | Ugt | Uge | Ult | Ule | Sgt | Sge | Slt | Sle
     deriving (Show,Eq)
 
 data Size = Bit | Byte | Word | DWord | Void
@@ -69,14 +69,12 @@ showInstruction (Comment s)         = ";" ++ s
 showInstruction (Raw s)             = s
 showInstruction (Invoke s f)        = "call " ++ showSize s ++ " " ++ f
 
-
 showSize :: Size -> String
 showSize Bit = "i1"
 showSize Byte = "i8"
 showSize Word = "i32"
 showSize DWord = "double"
 showSize Void = "void"
-
 
 showVal :: Val -> String
 showVal (VVal s) = s
