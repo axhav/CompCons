@@ -21,6 +21,7 @@ data Env = Env
   , code       :: [LLVM.Instruction]
   , label      :: LLVM.Label
   , tempReg    :: Int
+  , globalList :: [LLVM.Instruction]
   }
 
 type Contexts = [VarContext]
@@ -63,7 +64,15 @@ newBlock = do
 -- Ends current block.
 exitBlock :: CodeGen ()
 exitBlock = do  
-    modify $ updateContexts $ tail
+    cnt <- gets contexts 
+    case cnt of 
+        (c:c1:cont) -> do
+            let n = next c
+            let newTail = c1 {next = n} : cont
+            modify $ updateContexts $ (\x -> newTail)
+        (c:[]) ->    
+            modify $ updateContexts $ tail
+    
 
 extendContext :: Ident -> Type -> CodeGen ()
 extendContext x t = modify $ updateContexts $ \ (b : bs) ->
@@ -77,9 +86,6 @@ valAdd (LLVM.VInt i) i1 = LLVM.VInt (i+i1)
 
 extendEnvSig :: TopDef -> CodeGen () 
 extendEnvSig def@(FnDef _t i _args _ss) = modify $ updateEnvSig i def
-    
-updateEnvSig :: Ident -> TopDef -> Env -> Env 
-updateEnvSig i def env = env {envSig = Map.insert i def (envSig env)}
 
 -- Looks up the input variable and return the Val and type of variable.
 lookupVar :: Ident -> CodeGen (LLVM.Val,Type)
@@ -88,13 +94,6 @@ lookupVar x = do
   case catMaybes $ map (Map.lookup x . vars) bs of
     []      -> error $ "unbound var " ++ printTree x
     (a : _) -> return a
-    
-lookDef :: Ident -> CodeGen TopDef -- TODO not in use RM
-lookDef i = do
-    env <- gets envSig
-    case Map.lookup i ( env) of
-        Nothing -> error $ "unbound func " ++ printTree i
-        Just a  -> return a
 
 -- Returns the next label number.    
 getNextLabel :: CodeGen LLVM.Label
@@ -116,14 +115,15 @@ getVarReg id = do
     (r,_) <- lookupVar id
     return (LLVM.VVal ("%r"++show r))
 
-
-getClassName :: CodeGen String -- TODO not in use RM
-getClassName = do
-    l <- gets className
-    return l 
+-- Insert new global variable into globalList and return the variable name.
+setNextGlobalVar :: String -> CodeGen LLVM.Val
+setNextGlobalVar s = do
+    gl <- gets globalList
+    let gName = LLVM.VVal $ "@G" ++ (show $ length gl)
+    let l = (length s) + 1
+    modify $ updateGlobalList ((LLVM.GString gName l (LLVM.VVal s)):)
+    return gName
    
-removeNL :: String -> String -- TODO not in use RM
-removeNL s = filter (\a -> a/='\n') s
    
 -- * Environment
 
@@ -135,16 +135,11 @@ emptyEnv = Env
   , code       = []
   , label      = 0
   , tempReg    = 0
+  , globalList = []
   }
 
-almoastEmptyEnv :: String -> Env -- TODO not in use RM
-almoastEmptyEnv s = Env {className = s
-  , envSig     = Map.empty
-  , contexts   = []
-  , code       = []
-  , label      = 0
-  , tempReg    = 0
-  }
+updateEnvSig :: Ident -> TopDef -> Env -> Env 
+updateEnvSig i def env = env {envSig = Map.insert i def (envSig env)}
   
 updateContexts :: (Contexts -> Contexts) -> Env -> Env
 updateContexts f env = env { contexts = f (contexts env) }
@@ -157,6 +152,9 @@ updateLabel f env = env { label = f ( label env)}
 
 updateTempReg :: (Int -> Int) -> Env -> Env
 updateTempReg f env = env { tempReg = f ( tempReg env)}
+
+updateGlobalList :: ([LLVM.Instruction] -> [LLVM.Instruction]) -> Env -> Env
+updateGlobalList f env = env { globalList = f (globalList env) }
 
 -- * Contexts
 
@@ -175,12 +173,15 @@ almostemptyContext i = VarContext
 
 -- * Code Generator
 
--- Generats the code and returns it as a string TODO Do we need FilePath?!?! 
-codeGen :: FilePath -> Program -> String
-codeGen filename prg = header ++ unlines (map LLVM.showInstruction lcode)
+-- Generats the code and returns it as a string.
+codeGen :: Program -> String
+codeGen prg = header ++ unlines (map LLVM.showInstruction lcode)
     where
-        lcode = reverse $ code $ compileProgram prg `execState` emptyEnv
-        header = unlines ["declare void @printInt(i32)",""]
+        compileCode = compileProgram prg `execState` emptyEnv
+        lcode = reverse $ code compileCode ++ globalList compileCode
+        header = unlines (["declare void @printInt(i32)","declare void @printString(i8*)", 
+            "declare void @printDouble(double)", "declare i32 @readInt()", 
+            "declare double @readDouble()", ""]) 
 
 -- Compiles code for each method.
 compileProgram :: Program -> CodeGen ()
@@ -196,23 +197,24 @@ compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
     emit $ LLVM.Raw $ "define " ++ LLVM.showSize (typeToItype t) ++ " @"++ id ++ "(" ++ args' ++ ") {"
     allocateArgs args
     case t of
-         Void -> do
-            let b = Block (ss ++ [VRet])
-            compileBlock b
+         Void -> do -- For adding return stament in void functions.
+            case drop ((length ss) - 1) ss of
+                [VRet] -> compileBlock b
+                _      -> do
+                    let b = Block (ss ++ [VRet])
+                    compileBlock b
          _    -> do -- For checking if last statment was a condition.
             compileBlock b
             let ssl = last ss
             case ssl of
-                Cond _ _        -> emit $ LLVM.Raw $ "unreachable"
-                CondElse _ _ _  -> emit $ LLVM.Raw $ "unreachable" 
-                While _ _       -> emit $ LLVM.Raw $ "unreachable" 
-                _               -> blank 
+                Ret _ -> blank
+                _     -> emit $ LLVM.Raw $ "unreachable"
     exitBlock
     emit $ LLVM.Raw $ "}"
 
 -- Compiles the code for all the statments within a block 
 compileBlock :: Block -> CodeGen ()
-compileBlock (Block ss) = do    
+compileBlock (Block ss) = do   
     mapM_ compileStm ss
 
 -- Compiles a statment.
@@ -237,17 +239,17 @@ compileStm s = do
             (_,t) <- lookupVar id
             r <- getVarReg id
             (LLVM.VVal r1) <- getNextTempReg
-            emit $ LLVM.Raw $ "%" ++ r1 ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r) -- Load id into reg 
+            emit $ LLVM.Raw $ r1 ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r) -- Load id into reg 
             (LLVM.VVal r2) <- getNextTempReg
-            emit $ LLVM.Raw $ "%" ++ r2 ++ " = " ++ (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VVal r1) (LLVM.VInt 1)) -- Inc by one
+            emit $ LLVM.Raw $ r2 ++ " = " ++ (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VVal r1) (LLVM.VInt 1)) -- Inc by one
             emit $ LLVM.Store (typeToItype t) (LLVM.VVal r2) (typeToItype t) r -- Store the inc value into id
         (Decr id) -> do
             (_,t) <- lookupVar id
             r <- getVarReg id
             (LLVM.VVal r1) <- getNextTempReg
-            emit $ LLVM.Raw $ "%" ++ r1 ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r) -- Load id into reg 
+            emit $ LLVM.Raw $ r1 ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r) -- Load id into reg 
             (LLVM.VVal r2) <- getNextTempReg
-            emit $ LLVM.Raw $ "%" ++ r2 ++ " = " ++ (LLVM.showInstruction $ LLVM.Sub  (typeToItype t) (LLVM.VVal r1) (LLVM.VInt 1)) -- Dec by one
+            emit $ LLVM.Raw $ r2 ++ " = " ++ (LLVM.showInstruction $ LLVM.Sub  (typeToItype t) (LLVM.VVal r1) (LLVM.VInt 1)) -- Dec by one
             emit $ LLVM.Store (typeToItype t) (LLVM.VVal r2) (typeToItype t) r -- Store the dec value into id
         (Ret expr@(ETyped e t)) -> do
             e' <-  (compileExp expr)
@@ -257,8 +259,7 @@ compileStm s = do
         (Cond expr@(ETyped e' t) stm) -> do
             l1 <- getNextLabel
             l2 <- getNextLabel
-            r <- getNextTempReg
-            condHelper expr r
+            r <- compileExp expr
             emit $ LLVM.CondB r l1 l2 -- Jump check
             emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label to enter if-statment
             compileStm stm
@@ -268,8 +269,7 @@ compileStm s = do
             l1 <- getNextLabel
             l2 <- getNextLabel
             l3 <- getNextLabel
-            r <- getNextTempReg
-            condHelper expr r
+            r <- compileExp expr
             emit $ LLVM.CondB r l1 l2 -- Jump check
             emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label to enter first stm
             compileStm stm1
@@ -282,10 +282,9 @@ compileStm s = do
             l1 <- getNextLabel
             l2 <- getNextLabel
             l3 <- getNextLabel
-            r  <- getNextTempReg
             emit $ LLVM.Goto l1
             emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
-            condHelper expr r
+            r  <- compileExp expr
             emit $ LLVM.CondB r l2 l3  
             emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
             compileStm stm
@@ -320,7 +319,12 @@ compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
             r <- getNextTempReg
             emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (typeToItype t) f)) 
             return r
---compileExp (VVal r) (ETyped (EString s) t) =return ""
+compileExp (ETyped (EString s) t) = do
+    r1 <- setNextGlobalVar s
+    r2 <- getNextTempReg
+    let l = (length s) + 1
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.TwoArray l r1 0 0))
+    return r2
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
     r <- getNextTempReg 
@@ -362,26 +366,62 @@ compileExp (ETyped (EAdd e1 o e2) t) = do
 compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     e1' <- compileExp e1
     e2' <- compileExp e2
+    r <- getNextTempReg
     case o of 
-        LTH -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Slt (typeToItype t) e1' e2' 
-        LE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sle (typeToItype t) e1' e2' 
-        GTH -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sgt (typeToItype t) e1' e2' 
-        GE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sge (typeToItype t) e1' e2' 
-        EQU -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Eq (typeToItype t) e1' e2' 
-        NE  -> return $ LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Ne  (typeToItype t) e1' e2' 
+        LTH -> do
+            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Slt (typeToItype t) e1' e2') 
+            return r
+        LE  -> do
+            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sle (typeToItype t) e1' e2') 
+            return r
+        GTH -> do
+            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sgt (typeToItype t) e1' e2') 
+            return r
+        GE  -> do
+            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sge (typeToItype t) e1' e2') 
+            return r
+        EQU -> do
+            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Eq (typeToItype t) e1' e2') 
+            return r
+        NE  -> do
+            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Ne (typeToItype t) e1' e2') 
+            return r
 compileExp (ETyped (EAnd e1 e2) t) = do
+    l1 <- getNextLabel
+    l2 <- getNextLabel
+    r1 <- getNextTempReg 
+    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (typeToItype t)))
     e1' <- compileExp e1
+    emit $ LLVM.Store (typeToItype t) e1' (typeToItype t) r1
+    emit $ LLVM.CondB e1' l1 l2
+    emit $ LLVM.Raw $ "L" ++ show l1 ++ ":"  
     e2' <- compileExp e2
-    r <- getNextTempReg 
-    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.And (typeToItype t) e1' e2')) 
-    return r
+    r2 <- getNextTempReg
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.And (typeToItype t) e1' e2')) 
+    emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r1
+    emit $ LLVM.Goto l2
+    emit $ LLVM.Raw $ "L" ++ show l2 ++ ":"    
+    r3 <- getNextTempReg
+    emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.Load (typeToItype t) r1)) 
+    return r3
 compileExp (ETyped (EOr e1 e2) t) = do
+    l1 <- getNextLabel
+    l2 <- getNextLabel
+    r1 <- getNextTempReg 
+    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (typeToItype t)))
     e1' <- compileExp e1
+    emit $ LLVM.Store (typeToItype t) e1' (typeToItype t) r1
+    emit $ LLVM.CondB e1' l2 l1
+    emit $ LLVM.Raw $ "L" ++ show l1 ++ ":"  
     e2' <- compileExp e2
-    r <- getNextTempReg 
-    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Or (typeToItype t) e1' e2')) 
-    return r
-compileExp a =  fail $ printTree a --TODO rm
+    r2 <- getNextTempReg
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Or (typeToItype t) e1' e2')) 
+    emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r1
+    emit $ LLVM.Goto l2
+    emit $ LLVM.Raw $ "L" ++ show l2 ++ ":"    
+    r3 <- getNextTempReg
+    emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.Load (typeToItype t) r1)) 
+    return r3
 
 -- * Helps functions for the code generator.
 
@@ -399,9 +439,11 @@ showA ((Arg t id):ids) = do
 -- Generats and returns the code for the arguments/input variables for method calls
 showE :: [Type] -> [LLVM.Val] ->  String
 showE _ []              = "" 
+showE [Void] ([LLVM.VVal s]) = "i8* " ++ s  
 showE [t] ([LLVM.VVal s]) = (LLVM.showSize (typeToItype t)) ++ " " ++ s
 showE [t] ([LLVM.VInt i]) = (LLVM.showSize (typeToItype t)) ++ " " ++ show i
 showE [t] ([LLVM.VDoub d]) = (LLVM.showSize (typeToItype t)) ++ " " ++ show d
+showE (Void:ts) ((LLVM.VVal s):ss) = "i8* " ++ s ++ showE ts ss
 showE (t:ts) ((LLVM.VVal s):ss) = (LLVM.showSize (typeToItype t)) ++ " " ++ s ++ " , " ++ showE ts ss
 showE (t:ts) ((LLVM.VInt i):is) = (LLVM.showSize (typeToItype t)) ++ " " ++ show i ++ " , " ++ showE ts is
 showE (t:ts) ((LLVM.VDoub d):ds) = (LLVM.showSize (typeToItype t)) ++ " " ++ show d ++ " , " ++ showE ts ds
@@ -433,44 +475,14 @@ declHelper (NoInit id) t = do
     extendContext id t
     r <- getVarReg id
     emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+    case t of    
+        Doub -> emit $ LLVM.Store (typeToItype t) (LLVM.VDoub 0.0) (typeToItype t) r
+        _    -> emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r
 declHelper (Init id expr) t = do 
+    e' <- (compileExp expr)
     extendContext id t
     r <- getVarReg id
     emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
-    e' <- (compileExp expr)
     emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
-
--- Helps the condition statment in function "compileStm" to emit right string
-condHelper :: Expr -> LLVM.Val -> CodeGen ()
-condHelper expr@(ETyped e t) r = case e of
-    ELitTrue     -> do
-       condEmiter expr r
-    ELitFalse    -> do
-       condEmiter expr r
-    ELitInt i    -> do 
-       condEmiter expr r
-    ELitDoub d   -> do 
-        condEmiter expr r
-    EVar id      -> do
-        condEmiter expr r
-    ERel e1 o e2 -> do
-        expr' <- compileExp expr
-        emit $ LLVM.Ass r expr'
-    Not e        -> do
-        condEmiter expr r
-    EAnd e1 e2   -> do
-        condEmiter expr r
-    EOr e1 e2    -> do
-        condEmiter expr r
-    _            -> undefined
-
--- Adds zero with a value into a register
-condEmiter :: Expr -> LLVM.Val -> CodeGen ()
-condEmiter expr@(ETyped e' t) (LLVM.VVal r) = do
-    e <- compileExp expr 
-    emit $ LLVM.Raw $ r ++ " = " ++ (LLVM.showInstruction $ LLVM.Add (typeToItype t) e (LLVM.VInt 0)) 
-
-
-
 
 

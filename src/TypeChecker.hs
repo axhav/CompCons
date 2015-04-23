@@ -199,7 +199,9 @@ inferExp e = case e of
     (EApp id exprs)  -> case id of
         Ident "printString" -> 
             case exprs of
-                [(EString s)] -> return (ETyped (EApp id exprs) Void)
+                [(EString s)] -> do
+                    exprs' <- mapM inferExp exprs
+                    return (ETyped (EApp id exprs') Void)
                 _           -> fail "expected string literal in function printString"
         _-> do
                 FunType t ts <- lookDef id
@@ -207,8 +209,8 @@ inferExp e = case e of
                     "incorrect number of arguments to function " ++ printTree id
                 ts' <- (zipWithM checkExp exprs ts)
                 return (ETyped (EApp id ts') t) 
-    (EString str)   -> return (EString str) --  TODO look at this
-    (Neg expr)      ->do
+    (EString str)   -> return (ETyped (EString str) Void) --  TODO look at this
+    (Neg expr)      -> do
         ret@(ETyped _ t) <- (inferExp expr)
         return (ETyped (Neg ret) t) 
     (Not expr)      -> do
