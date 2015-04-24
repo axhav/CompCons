@@ -14,4 +14,5 @@ clean:
 	-rm -f *.log *.aux *.hi *.o *.dvi *.out
 	-rm -f DocJavalette.ps
 	-rm -f ../jlc ../lib/*.bc
+	-rm -f ../testsuite/good/*.bc ../testsuite/good/*.ll ../testsuite/good/*.o
 
