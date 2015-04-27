@@ -23,7 +23,7 @@ main = do
   case args of
     [file] -> readFile file >>= check file
     _      -> do
-      putStrLn "Usage: lab3 <SourceFile>"
+      putStrLn "Usage: jcl <SourceFile>"
       exitFailure
 
 
@@ -49,6 +49,7 @@ check file s = case pProgram (myLexer s) of
                 let llvmFile = replaceExtension file ".ll"
                 writeFile llvmFile code
                 pAs <- runProcess "llvm-as" [llvmFile] Nothing Nothing Nothing (Just stderr) Nothing
+                --pAs <- runProcess "cat" [llvmFile, "|", "llvm-as", "|", "opt", "-std-compile-opts"] Nothing Nothing Nothing (Just stderr) Nothing                
                 exitCodeAs <- waitForProcess pAs
                 case exitCodeAs of
                     ExitFailure i -> do
@@ -57,6 +58,8 @@ check file s = case pProgram (myLexer s) of
                         exitWith exitCodeAs
                     ExitSuccess   -> do
                         let llvmLinkBC = replaceExtension llvmFile ".bc"
+                        pOpt <- runProcess "opt" [llvmLinkBC, "-std-compile-opts", "-o", llvmLinkBC] Nothing Nothing Nothing (Just stderr) Nothing
+                        waitForProcess pOpt                        
                         pLink <- runProcess "llvm-link" [llvmLinkBC, "./lib/runtime.bc", "-o", llvmLinkBC] Nothing Nothing Nothing (Just stderr) Nothing
                         exitCodeLINK <- waitForProcess pLink
                         case exitCodeLINK of
