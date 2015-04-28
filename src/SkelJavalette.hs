@@ -75,6 +75,7 @@ transExpr x = case x of
   ELitFalse  -> failure x
   EApp id exprs  -> failure x
   EString str  -> failure x
+  EIndex expr1 expr2  -> failure x
   Neg expr  -> failure x
   Not expr  -> failure x
   EMul expr1 mulop2 expr3  -> failure x
@@ -82,6 +83,7 @@ transExpr x = case x of
   ERel expr1 relop2 expr3  -> failure x
   EAnd expr1 expr2  -> failure x
   EOr expr1 expr2  -> failure x
+  EArr type' expr  -> failure x
 
 
 transAddOp :: AddOp -> Result

@@ -44,13 +44,14 @@ import ErrM
   'false' { PT _ (TS _ 27) }
   'if' { PT _ (TS _ 28) }
   'int' { PT _ (TS _ 29) }
-  'return' { PT _ (TS _ 30) }
-  'true' { PT _ (TS _ 31) }
-  'void' { PT _ (TS _ 32) }
-  'while' { PT _ (TS _ 33) }
-  '{' { PT _ (TS _ 34) }
-  '||' { PT _ (TS _ 35) }
-  '}' { PT _ (TS _ 36) }
+  'new' { PT _ (TS _ 30) }
+  'return' { PT _ (TS _ 31) }
+  'true' { PT _ (TS _ 32) }
+  'void' { PT _ (TS _ 33) }
+  'while' { PT _ (TS _ 34) }
+  '{' { PT _ (TS _ 35) }
+  '||' { PT _ (TS _ 36) }
+  '}' { PT _ (TS _ 37) }
 
 L_ident  { PT _ (TV $$) }
 L_integ  { PT _ (TI $$) }
@@ -131,6 +132,7 @@ Type : 'int' { Int }
 
 Expr :: { Expr }
 Expr : Expr1 '||' Expr { EOr $1 $3 } 
+  | 'new' Type '[' Expr ']' { EArr $2 $4 }
   | Expr1 { $1 }
 
 
@@ -148,6 +150,7 @@ Expr6 : Ident { EVar $1 }
   | 'false' { ELitFalse }
   | Ident '(' ListExpr ')' { EApp $1 $3 }
   | String { EString $1 }
+  | Expr6 '[' Expr6 ']' { EIndex $1 $3 }
   | '(' Expr ')' { $2 }
 
 

@@ -181,7 +181,7 @@ codeGen prg = header ++ unlines (map LLVM.showInstruction lcode)
         lcode = reverse $ code compileCode ++ globalList compileCode
         header = unlines (["declare void @printInt(i32)","declare void @printString(i8*)", 
             "declare void @printDouble(double)", "declare i32 @readInt()", 
-            "declare double @readDouble()", ""]) 
+            "declare double @readDouble()", "declare i32* @calloc(i32, i32)", ""]) 
 
 -- Compiles code for each method.
 compileProgram :: Program -> CodeGen ()
@@ -422,6 +422,9 @@ compileExp (ETyped (EOr e1 e2) t) = do
     r3 <- getNextTempReg
     emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.Load (typeToItype t) r1)) 
     return r3
+compileExp (ETyped (EArr t1 e) t2) = do
+    undefined
+    
 
 -- * Helps functions for the code generator.
 

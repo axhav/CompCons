@@ -161,6 +161,7 @@ instance Print Expr where
    ELitFalse  -> prPrec i 6 (concatD [doc (showString "false")])
    EApp id exprs -> prPrec i 6 (concatD [prt 0 id , doc (showString "(") , prt 0 exprs , doc (showString ")")])
    EString str -> prPrec i 6 (concatD [prt 0 str])
+   EIndex expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , doc (showString "[") , prt 6 expr , doc (showString "]")])
    Neg expr -> prPrec i 5 (concatD [doc (showString "-") , prt 6 expr])
    Not expr -> prPrec i 5 (concatD [doc (showString "!") , prt 6 expr])
    EMul expr0 mulop expr -> prPrec i 4 (concatD [prt 4 expr0 , prt 0 mulop , prt 5 expr])
@@ -168,6 +169,7 @@ instance Print Expr where
    ERel expr0 relop expr -> prPrec i 2 (concatD [prt 2 expr0 , prt 0 relop , prt 3 expr])
    EAnd expr0 expr -> prPrec i 1 (concatD [prt 2 expr0 , doc (showString "&&") , prt 1 expr])
    EOr expr0 expr -> prPrec i 0 (concatD [prt 1 expr0 , doc (showString "||") , prt 0 expr])
+   EArr type' expr -> prPrec i 0 (concatD [doc (showString "new") , prt 0 type' , doc (showString "[") , prt 0 expr , doc (showString "]")])
 
   prtList es = case es of
    [] -> (concatD [])

@@ -80,6 +80,8 @@ EApp.      Expr6 ::= Ident "(" [Expr] ")" ;
 
 EString.   Expr6 ::= String ;
 
+EIndex.    Expr6 ::= Expr6 "[" Expr6 "]" ;
+
 Neg.       Expr5 ::= "-" Expr6 ;
 
 Not.       Expr5 ::= "!" Expr6 ;
@@ -93,6 +95,8 @@ ERel.      Expr2 ::= Expr2 RelOp Expr3 ;
 EAnd.      Expr1 ::= Expr2 "&&" Expr1 ;
 
 EOr.       Expr ::= Expr1 "||" Expr ;
+
+EArr.      Expr ::= "new" Type "[" Expr "]" ;
 
 coercions  Expr 6 ;
 

@@ -61,6 +61,7 @@ data Expr =
  | ELitFalse
  | EApp Ident [Expr]
  | EString String
+ | EIndex Expr Expr
  | Neg Expr
  | Not Expr
  | EMul Expr MulOp Expr
@@ -68,6 +69,7 @@ data Expr =
  | ERel Expr RelOp Expr
  | EAnd Expr Expr
  | EOr Expr Expr
+ | EArr Type Expr
   deriving (Eq,Ord,Show,Read)
 
 data AddOp =

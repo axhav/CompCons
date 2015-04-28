@@ -46,8 +46,8 @@ checkDef (FnDef t f args bl) = do
             ret <- (checkBlock bl) 
             return $ FnDef t f args ret  
         ((Arg t' x):xs)-> do
-            extendCont x t'   --extendCont (newBlock env) (head args)
-            loop (drop 1 args) --foldl (\ env (Arg t x) -> checkDupe env x >> extendCont env x t) (newBlock env) args
+            extendCont x t'
+            loop (drop 1 args) 
             ret <- (checkBlock bl) 
             
             return $ FnDef t f args ret
@@ -209,7 +209,7 @@ inferExp e = case e of
                     "incorrect number of arguments to function " ++ printTree id
                 ts' <- (zipWithM checkExp exprs ts)
                 return (ETyped (EApp id ts') t) 
-    (EString str)   -> return (ETyped (EString str) Void) --  TODO look at this
+    (EString str)   -> return (ETyped (EString str) Void)
     (Neg expr)      -> do
         ret@(ETyped _ t) <- (inferExp expr)
         return (ETyped (Neg ret) t) 
@@ -223,8 +223,7 @@ inferExp e = case e of
         (e1',e2',t) <- binaryNum' e1 e2 [Int,Doub]
         return (ETyped  (EAdd e1' op e2') t)
     (ERel e1 op e2) -> do
-        (e1',e2',t) <- binaryRel e1 e2 op [Int,Doub,Bool] --TODO RM OP: Städa 
-        --fail $ show e1'
+        (e1',e2',t) <- binaryRel e1 e2 op [Int,Doub,Bool]
         return (ETyped  (ERel e1' op e2') t)
     (EAnd e1 e2)    -> do
         (e1',e2',t) <- binaryNum' e1 e2 [Bool]
@@ -232,6 +231,11 @@ inferExp e = case e of
     (EOr e1 e2)     -> do
         (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EOr e1' e2') t)
+    (EArr t e)      -> do
+        expr@(ETyped e' t') <- inferExp e
+        unless (t' /= Int) $ fail $
+            "Expected type int but found type " ++ printTree t'
+        return (ETyped (EArr t expr) t)
     
 
 -- Used to compare the type of numerical expression and makes it 
@@ -271,7 +275,6 @@ binaryRel :: Expr -> Expr -> RelOp -> [Type] -> EnvM (Expr, Expr ,Type)
 binaryRel e1 e2 op ts = do
     exp1@(ETyped e1' t1) <- inferExp e1
     exp2@(ETyped e2' t2) <- inferExp e2
-    --fail $ printTree exp1 ++ "    " ++ printTree exp2
     unless (t1 == t2) $ fail $
             "expected type " ++ printTree t1 ++ " but found type " ++ printTree t2
     unless (t1 `elem` ts)  $ fail $
@@ -382,6 +385,3 @@ help env (def:defs) = case runStateT (unEnv (checkDef def)) env of
                             return ( (fst a): b )
         Bad m ->  fail m
     
-    {-
-lift' :: EnvM a -> Err a
-lift' a = unEnv a-}
