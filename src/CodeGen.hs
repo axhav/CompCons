@@ -123,6 +123,14 @@ setNextGlobalVar s = do
     let l = (length s) + 1
     modify $ updateGlobalList ((LLVM.GString gName l (LLVM.VVal s)):)
     return gName
+
+-- Insert new global variable into globalList and return the variable name. TODO
+setNextGlobalArr :: Type -> CodeGen LLVM.Val
+setNextGlobalArr t = do
+    gl <- gets globalList
+    let gName = LLVM.VVal $ "%arr" ++ (show $ length gl)
+    modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName ):)
+    return gName
    
    
 -- * Environment
@@ -181,7 +189,7 @@ codeGen prg = header ++ unlines (map LLVM.showInstruction lcode)
         lcode = reverse $ code compileCode ++ globalList compileCode
         header = unlines (["declare void @printInt(i32)","declare void @printString(i8*)", 
             "declare void @printDouble(double)", "declare i32 @readInt()", 
-            "declare double @readDouble()", "declare i32* @calloc(i32, i32)", ""]) 
+            "declare double @readDouble()", "declare i8* @calloc(i32, i32)", ""]) 
 
 -- Compiles code for each method.
 compileProgram :: Program -> CodeGen ()
@@ -325,6 +333,10 @@ compileExp (ETyped (EString s) t) = do
     let l = (length s) + 1
     emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.TwoArray l r1 0 0))
     return r2
+compileExp (ETyped (EIndex e1 e2) t) = do
+    undefined --TODO fix this
+compileExp (ETyped (EDot e1 e2) t) = do 
+    undefined --TODO fix this
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
     r <- getNextTempReg 
@@ -422,9 +434,30 @@ compileExp (ETyped (EOr e1 e2) t) = do
     r3 <- getNextTempReg
     emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.Load (typeToItype t) r1)) 
     return r3
-compileExp (ETyped (EArr t1 e) t2) = do
-    undefined
+compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
+    g <- setNextGlobalArr t2
+    r1 <- getNextTempReg
+    r2 <- getNextTempReg
+    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (LLVM.SSize (g++"Struct"))))
+    r3 <- getHardwareSizeOfType t2
+    r4 <- getNextTempReg
+    emit $ LLVM.Ass r4 (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) r3 (LLVM.VInt 8)))
+    (i:is) <- map compileExp e --TODO fix for dynamic array
+    let f = "@calloc(i32 " ++ show i ++ ", " ++ (LLVM.showSize t2) ++ " " ++ r4
     
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (LLVM.P LLVM.Byte) f)) 
+    return r1 
+
+-- Returns the size of type inside a register.
+getHardwareSizeOfType :: Type -> LLVM.Val
+getHardwareSizeOfType t = do
+    r1 <- getNextTempReg
+    r2 <- getNextTempReg
+    r3 <- getNextTempReg
+    emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VInt 0) (LLVM.VInt 0)))
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Raw $ "getelementptr " ++ r1 ++ "* null, i32 1"))
+    emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.PtrToInt r1 r2 (typeToItype t))) 
+    return r3
 
 -- * Helps functions for the code generator.
 
@@ -488,4 +521,8 @@ declHelper (Init id expr) t = do
     emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
     emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
 
+    
+    
+    
 
+   

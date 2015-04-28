@@ -74,8 +74,11 @@ checkStm s = case s of
         exitBlock
         return (BStmt b')  
     (Decl t items) -> do
-        retItems<- loopHelper t items
-        return (Decl t retItems)
+        retItems <- loopHelper t items
+        case t of
+            (ArrayT t' []) -> return (Decl t retItems)
+            (ArrayT t' _)  -> fail $ "Expected empty brackets in array declaration" 
+            _              -> return (Decl t retItems)
     (Ass id expr) ->  do
         t <- lookVar id
         ret@(ETyped e t') <- inferExp expr           
@@ -210,6 +213,17 @@ inferExp e = case e of
                 ts' <- (zipWithM checkExp exprs ts)
                 return (ETyped (EApp id ts') t) 
     (EString str)   -> return (ETyped (EString str) Void)
+    (EIndex e1 e2)  -> do
+        e2'@(ETyped _ t) <- inferExp e2
+        unless (t /= Int) $ fail $ 
+            "Expected type int but found type " ++ printTree t
+        e1'@(ETyped _ t1) <- inferExp e1
+        return (ETyped (EIndex e1' e2') t1)
+    (EDot e1 e2@(EVar (Ident s)))    -> do
+        unless (s /= "length") $ fail $ --TODO add general
+            "Expected lenght after do but found " ++ printTree e2
+        e1' <- inferExp e1
+        return (ETyped (EDot e1' e2) Int)
     (Neg expr)      -> do
         ret@(ETyped _ t) <- (inferExp expr)
         return (ETyped (Neg ret) t) 
@@ -231,11 +245,17 @@ inferExp e = case e of
     (EOr e1 e2)     -> do
         (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EOr e1' e2') t)
-    (EArr t e)      -> do
-        expr@(ETyped e' t') <- inferExp e
-        unless (t' /= Int) $ fail $
-            "Expected type int but found type " ++ printTree t'
-        return (ETyped (EArr t expr) t)
+    (EArr t)      -> do
+        expr <- inferType t
+        return (ETyped (EArr (ArrayT t expr)) t)
+
+inferType :: Type -> EnvM [Expr]
+inferType t = case t of
+    (ArrayT t' e) -> do
+        expr <- mapM inferExp e
+        mapM (\(ETyped e' t'') -> do; unless (t'' /= Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
+        return expr
+    _             -> fail $ "Expected array decleration but found " ++ printTree t
     
 
 -- Used to compare the type of numerical expression and makes it 

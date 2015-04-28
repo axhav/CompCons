@@ -18,7 +18,7 @@ type Var = String
 data Cond = Eq | Ne | Ugt | Uge | Ult | Ule | Sgt | Sge | Slt | Sle
     deriving (Show,Eq)
 
-data Size = Bit | Byte | Word | DWord | Void
+data Size = Bit | Byte | Word | DWord | Void | SSize String | P Size
     deriving (Eq)
 
 data Instruction
@@ -45,7 +45,9 @@ data Instruction
     | Raw String
     | Invoke Size String 
     | GString Val Int Val
+    | GStruct Size String
     | TwoArray Int Val Int Int
+    | PtrToInt Val Val Size
     deriving (Eq)
 
 showInstruction :: Instruction -> String 
@@ -79,14 +81,18 @@ showInstruction (Comment s)         = ";" ++ s
 showInstruction (Raw s)             = s
 showInstruction (Invoke s f)        = "call " ++ showSize s ++ " " ++ f
 showInstruction (GString v1 i v2)   = show v1 ++ " = internal constant [" ++ show i ++ " x i8] c\"" ++ show v2 ++ "\\00\"" 
+showInstruction (GStruct s n)       = n ++ " = type " ++ n ++ "Struct*\n" ++ n ++ "Struct = type { i32, [0 x " ++ showSize s ++ "] }"
 showInstruction (TwoArray i1 v i2 i3) = "getelementptr [" ++ show i1 ++ " x i8]* " ++ show v ++ " , i32 " ++ show i2 ++ " , i32 " ++ show i3
+showInstruction (PtrToInt v1 v2 s)       = "ptrtoint " ++ show v1 ++ "* " ++ show v2 ++ " to " ++ showSize s
 
 showSize :: Size -> String
-showSize Bit = "i1"
-showSize Byte = "i8"
-showSize Word = "i32"
-showSize DWord = "double"
-showSize Void = "void"
+showSize Bit        = "i1"
+showSize Byte       = "i8"
+showSize Word       = "i32"
+showSize DWord      = "double"
+showSize Void       = "void"
+showSize (SSize s)  = s
+showSize (P s)      = showSize s ++ "*"
 
 showVal :: Val -> String
 showVal (VVal s) = s

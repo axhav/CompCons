@@ -3,7 +3,7 @@ declare void @printString(i8*)
 declare void @printDouble(double)
 declare i32 @readInt()
 declare double @readDouble()
-declare i8* @calloc(i32, i32)
+declare [0 x i32] @calloc(i32, i32)
 
 
 %array = type %arrayStruct*
@@ -17,8 +17,9 @@ define i32 @main() {
 ; push the structs to the global stuff
 
 %main = alloca %arrayStruct
-%arrayCall1 = call i8* @calloc(i32 4, i32 4)
-%arrayCall = bitcast i8* %arrayCall1 to [0 x i32]
+%t1111 = add i32 0, 4
+%arrayCall = call [0 x i32] @calloc(i32 4, i32 4)
+;%arrayCall = bitcast i8* %arrayCall1 to [0 x i32] ; Gillar inte casten
 
 ;Stores array size into main struct
 %arrPointer1 = getelementptr %array %main , i32 0, i32 0
@@ -33,7 +34,7 @@ store [0 x i32] %arrayCall, [0 x i32]* %arrPointer2
 %arrP = getelementptr %array %main , i32 0, i32 1, i32 0 
 store i32 15, i32* %arrP
 
-%t1 = iadd i32 0, i32 0 
+%t1 = add i32 0, 0 
 
 %arrP2 = getelementptr %array %main , i32 0, i32 1 , i32 %t1 ;Gets pointer to array
 %res = load i32* %arrP2

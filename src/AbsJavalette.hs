@@ -49,6 +49,7 @@ data Type =
  | Doub
  | Bool
  | Void
+ | ArrayT Type [Expr]
  | Fun Type [Type]
   deriving (Eq,Ord,Show,Read)
 
@@ -62,6 +63,7 @@ data Expr =
  | EApp Ident [Expr]
  | EString String
  | EIndex Expr Expr
+ | EDot Expr Expr
  | Neg Expr
  | Not Expr
  | EMul Expr MulOp Expr
@@ -69,7 +71,7 @@ data Expr =
  | ERel Expr RelOp Expr
  | EAnd Expr Expr
  | EOr Expr Expr
- | EArr Type Expr
+ | EArr Type
   deriving (Eq,Ord,Show,Read)
 
 data AddOp =

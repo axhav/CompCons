@@ -62,6 +62,7 @@ transType x = case x of
   Doub  -> failure x
   Bool  -> failure x
   Void  -> failure x
+  ArrayT type' exprs  -> failure x
   Fun type' types  -> failure x
 
 
@@ -76,6 +77,7 @@ transExpr x = case x of
   EApp id exprs  -> failure x
   EString str  -> failure x
   EIndex expr1 expr2  -> failure x
+  EDot expr1 expr2  -> failure x
   Neg expr  -> failure x
   Not expr  -> failure x
   EMul expr1 mulop2 expr3  -> failure x
@@ -83,7 +85,7 @@ transExpr x = case x of
   ERel expr1 relop2 expr3  -> failure x
   EAnd expr1 expr2  -> failure x
   EOr expr1 expr2  -> failure x
-  EArr type' expr  -> failure x
+  EArr type'  -> failure x
 
 
 transAddOp :: AddOp -> Result

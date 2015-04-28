@@ -58,6 +58,8 @@ Bool.      Type ::= "boolean" ;
 
 Void.      Type ::= "void" ;
 
+ArrayT.    Type ::= Type "[" [Expr] "]";
+
 internal   Fun. Type ::= Type "(" [Type] ")" ;
 
 internal   ETyped. Expr ::= "[" Expr ":" Type "]" ;
@@ -82,6 +84,8 @@ EString.   Expr6 ::= String ;
 
 EIndex.    Expr6 ::= Expr6 "[" Expr6 "]" ;
 
+EDot.      Expr6 ::= Expr6 "." Expr6 ;
+
 Neg.       Expr5 ::= "-" Expr6 ;
 
 Not.       Expr5 ::= "!" Expr6 ;
@@ -96,7 +100,7 @@ EAnd.      Expr1 ::= Expr2 "&&" Expr1 ;
 
 EOr.       Expr ::= Expr1 "||" Expr ;
 
-EArr.      Expr ::= "new" Type "[" Expr "]" ;
+EArr.      Expr ::= "new" Type ;
 
 coercions  Expr 6 ;
 
