@@ -438,28 +438,39 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     g <- setNextGlobalArr t2
     r1 <- getNextTempReg
     r2 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (LLVM.SSize (g++"Struct"))))
     r3 <- getHardwareSizeOfType t2
     r4 <- getNextTempReg
+    r5 <- getNextTempReg
+    r6 <- getNextTempReg
+    r7 <- getNextTempReg
+    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (LLVM.SSize (g++"Struct"))))
     emit $ LLVM.Ass r4 (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) r3 (LLVM.VInt 8)))
-    (i:is) <- mapM compileExp e --TODO fix for dynamic array
-    let f = "@calloc(i32 " ++ show i ++ ", " ++ (showE [t2] [r4])-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
-    
+    (e':is) <- mapM compileExp e --TODO fix for dynamic array
+    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (showE [t2] [r4]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
     emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (LLVM.P LLVM.Byte) f)) 
+    emit $ LLVM.Ass r5 (LLVM.VVal (LLVM.showInstruction $ LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0))) 
+    
+    --Stores size of array to struct
+    emit $ LLVM.Ass r6 (LLVM.VVal (LLVM.showInstruction $ LLVM.GetElmPtr (LLVM.SSize g) r1 0 0))
+    emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
+
+    --Stores calloc pointer to struct
+    emit $ LLVM.Ass r7 (LLVM.VVal (LLVM.showInstruction $ LLVM.GetElmPtr (LLVM.SSize g) r1 0 1))  
+    emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
     return r1 
+
+-- * Helps functions for the code generator.
 
 -- Returns the size of type inside a register.
 getHardwareSizeOfType :: Type -> CodeGen LLVM.Val
 getHardwareSizeOfType t = do
     r1 <- getNextTempReg
     r2 <- getNextTempReg
-    r3 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VInt 0) (LLVM.VInt 0)))
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Raw $ "getelementptr " ++ show r1 ++ "* null, i32 1"))
-    emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.PtrToInt r1 r2 (typeToItype t))) 
-    return r3
-
--- * Helps functions for the code generator.
+    --r3 <- getNextTempReg
+    --emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VInt 0) (LLVM.VInt 0)))
+    emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Raw $ "getelementptr " ++ (LLVM.showSize (LLVM.P (typeToItype t))) ++ " null, i32 1"))
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.PtrToInt (typeToItype t) r1 (typeToItype t))) 
+    return r2
 
 -- Generats and returns the code for the arguments to a code block/method.
 showA :: [Arg] -> CodeGen String
@@ -503,6 +514,7 @@ typeToItype Int  = LLVM.Word
 typeToItype Doub = LLVM.DWord
 typeToItype Bool = LLVM.Bit
 typeToItype Void = LLVM.Void
+typeToItype (ArrayT t _) = typeToItype t
 
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 

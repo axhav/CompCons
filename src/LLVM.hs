@@ -18,7 +18,7 @@ type Var = String
 data Cond = Eq | Ne | Ugt | Uge | Ult | Ule | Sgt | Sge | Slt | Sle
     deriving (Show,Eq)
 
-data Size = Bit | Byte | Word | DWord | Void | SSize String | P Size
+data Size = Bit | Byte | Word | DWord | Void | SSize String | P Size | A Size Int
     deriving (Eq)
 
 data Instruction
@@ -47,7 +47,9 @@ data Instruction
     | GString Val Int Val
     | GStruct Size String
     | TwoArray Int Val Int Int
-    | PtrToInt Val Val Size
+    | PtrToInt Size Val Size
+    | BitCast Size Val Size
+    | GetElmPtr Size Val Int Int
     deriving (Eq)
 
 showInstruction :: Instruction -> String 
@@ -81,9 +83,12 @@ showInstruction (Comment s)         = ";" ++ s
 showInstruction (Raw s)             = s
 showInstruction (Invoke s f)        = "call " ++ showSize s ++ " " ++ f
 showInstruction (GString v1 i v2)   = show v1 ++ " = internal constant [" ++ show i ++ " x i8] c\"" ++ show v2 ++ "\\00\"" 
-showInstruction (GStruct s n)       = n ++ " = type " ++ n ++ "Struct*\n" ++ n ++ "Struct = type { i32, [0 x " ++ showSize s ++ "] }"
+showInstruction (GStruct s n)       = n ++ " = type " ++ n ++ "Struct*\n" ++ n ++ "Struct = type { i32, [0 x " ++ showSize s ++ "]* }"
 showInstruction (TwoArray i1 v i2 i3) = "getelementptr [" ++ show i1 ++ " x i8]* " ++ show v ++ " , i32 " ++ show i2 ++ " , i32 " ++ show i3
-showInstruction (PtrToInt v1 v2 s)       = "ptrtoint " ++ show v1 ++ "* " ++ show v2 ++ " to " ++ showSize s
+showInstruction (PtrToInt s1 v2 s2) = "ptrtoint " ++ showSize s1 ++ "* " ++ show v2 ++ " to " ++ showSize s2
+showInstruction (BitCast s1 v2 s2)  = "bitcast " ++ showSize s1 ++ " " ++ show v2 ++ " to " ++ showSize s2
+showInstruction (GetElmPtr s1 v i1 i2) = "getelementptr " ++ showSize s1 ++ " " ++ show v ++ ", i32 " ++ show i1 ++ " , i32 " ++ show i2
+
 
 showSize :: Size -> String
 showSize Bit        = "i1"
@@ -93,6 +98,7 @@ showSize DWord      = "double"
 showSize Void       = "void"
 showSize (SSize s)  = s
 showSize (P s)      = showSize s ++ "*"
+showSize (A s i)    =  "[ " ++ show i ++ " x " ++ showSize s ++ " ]"
 
 showVal :: Val -> String
 showVal (VVal s) = s

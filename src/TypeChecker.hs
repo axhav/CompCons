@@ -245,17 +245,17 @@ inferExp e = case e of
     (EOr e1 e2)     -> do
         (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EOr e1' e2') t)
-    (EArr t)      -> do
+    (EArr t@(ArrayT t' _))      -> do
         expr <- inferType t
-        return (ETyped (EArr (ArrayT t expr)) t)
+        --fail $ printTree expr ++ "  |||||   " ++ printTree t
+        return (ETyped (EArr expr) (ArrayT t' []))
 
-inferType :: Type -> EnvM [Expr]
+inferType :: Type -> EnvM Type
 inferType t = case t of
     (ArrayT t' e) -> do
         expr <- mapM inferExp e
-        fail "error"
-        mapM (\(ETyped e' t'') -> do; unless (t'' /= Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
-        return expr
+        mapM (\(ETyped e' t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
+        return (ArrayT t' expr)
     _             -> fail $ "Expected array decleration but found " ++ printTree t
     
 
