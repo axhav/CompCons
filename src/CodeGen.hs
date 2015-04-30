@@ -125,11 +125,11 @@ setNextGlobalVar s = do
     return gName
 
 -- Insert new global variable into globalList and return the variable name. TODO
-setNextGlobalArr :: Type -> CodeGen LLVM.Val
+setNextGlobalArr :: Type -> CodeGen String
 setNextGlobalArr t = do
     gl <- gets globalList
-    let gName = LLVM.VVal $ "%arr" ++ (show $ length gl)
-    modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName ):)
+    let gName = "%arr" ++ (show $ length gl)
+    modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
     return gName
    
    
@@ -442,20 +442,20 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     r3 <- getHardwareSizeOfType t2
     r4 <- getNextTempReg
     emit $ LLVM.Ass r4 (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) r3 (LLVM.VInt 8)))
-    (i:is) <- map compileExp e --TODO fix for dynamic array
-    let f = "@calloc(i32 " ++ show i ++ ", " ++ (LLVM.showSize t2) ++ " " ++ r4
+    (i:is) <- mapM compileExp e --TODO fix for dynamic array
+    let f = "@calloc(i32 " ++ show i ++ ", " ++ (showE [t2] [r4])-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
     
     emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (LLVM.P LLVM.Byte) f)) 
     return r1 
 
 -- Returns the size of type inside a register.
-getHardwareSizeOfType :: Type -> LLVM.Val
+getHardwareSizeOfType :: Type -> CodeGen LLVM.Val
 getHardwareSizeOfType t = do
     r1 <- getNextTempReg
     r2 <- getNextTempReg
     r3 <- getNextTempReg
     emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VInt 0) (LLVM.VInt 0)))
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Raw $ "getelementptr " ++ r1 ++ "* null, i32 1"))
+    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Raw $ "getelementptr " ++ show r1 ++ "* null, i32 1"))
     emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.PtrToInt r1 r2 (typeToItype t))) 
     return r3
 
