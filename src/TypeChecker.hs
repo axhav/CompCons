@@ -215,7 +215,7 @@ inferExp e = case e of
     (EString str)   -> return (ETyped (EString str) Void)
     (EIndex e1 e2)  -> do
         e2'@(ETyped _ t) <- inferExp e2
-        unless (t /= Int) $ fail $ 
+        unless (t == Int) $ fail $ 
             "Expected type int but found type " ++ printTree t
         e1'@(ETyped _ t1) <- inferExp e1
         return (ETyped (EIndex e1' e2') t1)
@@ -247,7 +247,6 @@ inferExp e = case e of
         return (ETyped  (EOr e1' e2') t)
     (EArr t@(ArrayT t' _))      -> do
         expr <- inferType t
-        --fail $ printTree expr ++ "  |||||   " ++ printTree t
         return (ETyped (EArr expr) (ArrayT t' []))
 
 inferType :: Type -> EnvM Type
