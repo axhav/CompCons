@@ -325,13 +325,13 @@ compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
             return $ LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (typeToItype t) f)
         _    -> do
             r <- getNextTempReg
-            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (typeToItype t) f)) 
+            emit $ LLVM.Ass r (LLVM.Invoke (typeToItype t) f) 
             return r
 compileExp (ETyped (EString s) t) = do
     r1 <- setNextGlobalVar s
     r2 <- getNextTempReg
     let l = (length s) + 1
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.TwoArray l r1 0 0))
+    emit $ LLVM.Ass r2 (LLVM.TwoArray l r1 0 0)
     return r2
 compileExp (ETyped (EIndex e1 e2) t) = do
     undefined --TODO fix this
@@ -340,12 +340,12 @@ compileExp (ETyped (EDot e1 e2) t) = do
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
     r <- getNextTempReg 
-    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Neg (typeToItype t) e'))
+    emit $ LLVM.Ass r (LLVM.Neg (typeToItype t) e')
     return r 
 compileExp (ETyped (Not e) t) = do
     e' <- compileExp e
     r <- getNextTempReg
-    emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Not e'))
+    emit $ LLVM.Ass r (LLVM.Not e')
     return r
 compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
@@ -353,15 +353,15 @@ compileExp (ETyped (EMul e1 o e2) t) = do
     case o of
         Times -> do
             r <- getNextTempReg 
-            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Mul (typeToItype t) e1' e2')) 
+            emit $ LLVM.Ass r (LLVM.Mul (typeToItype t) e1' e2')
             return r
         Div   -> do
             r <- getNextTempReg 
-            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) e1' e2')) 
+            emit $ LLVM.Ass r (LLVM.Div (typeToItype t) e1' e2')
             return r
         Mod   -> do 
             r <- getNextTempReg 
-            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Mod (typeToItype t) e1' e2')) 
+            emit $ LLVM.Ass r (LLVM.Mod (typeToItype t) e1' e2')
             return r
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
@@ -369,11 +369,11 @@ compileExp (ETyped (EAdd e1 o e2) t) = do
     case o of 
         Plus  -> do
             r <- getNextTempReg 
-            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Add (typeToItype t) e1' e2')) 
+            emit $ LLVM.Ass r (LLVM.Add (typeToItype t) e1' e2') 
             return r
         Minus -> do 
             r <- getNextTempReg 
-            emit $ LLVM.Ass r (LLVM.VVal (LLVM.showInstruction $ LLVM.Sub (typeToItype t) e1' e2')) 
+            emit $ LLVM.Ass r (LLVM.Sub (typeToItype t) e1' e2')
             return r
 compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     e1' <- compileExp e1
@@ -381,58 +381,58 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     r <- getNextTempReg
     case o of 
         LTH -> do
-            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Slt (typeToItype t) e1' e2') 
+            emit $ LLVM.Ass r (LLVM.Compare LLVM.Slt (typeToItype t) e1' e2') 
             return r
         LE  -> do
-            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sle (typeToItype t) e1' e2') 
+            emit $ LLVM.Ass r (LLVM.Compare LLVM.Sle (typeToItype t) e1' e2') 
             return r
         GTH -> do
-            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sgt (typeToItype t) e1' e2') 
+            emit $ LLVM.Ass r (LLVM.Compare LLVM.Sgt (typeToItype t) e1' e2') 
             return r
         GE  -> do
-            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Sge (typeToItype t) e1' e2') 
+            emit $ LLVM.Ass r (LLVM.Compare LLVM.Sge (typeToItype t) e1' e2') 
             return r
         EQU -> do
-            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Eq (typeToItype t) e1' e2') 
+            emit $ LLVM.Ass r (LLVM.Compare LLVM.Eq (typeToItype t) e1' e2') 
             return r
         NE  -> do
-            emit $ LLVM.Ass r (LLVM.VVal $ LLVM.showInstruction $ LLVM.Compare LLVM.Ne (typeToItype t) e1' e2') 
+            emit $ LLVM.Ass r (LLVM.Compare LLVM.Ne (typeToItype t) e1' e2') 
             return r
 compileExp (ETyped (EAnd e1 e2) t) = do
     l1 <- getNextLabel
     l2 <- getNextLabel
     r1 <- getNextTempReg 
-    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (typeToItype t)))
+    emit $ LLVM.Ass r1 (LLVM.Alloca (typeToItype t))
     e1' <- compileExp e1
     emit $ LLVM.Store (typeToItype t) e1' (typeToItype t) r1
     emit $ LLVM.CondB e1' l1 l2
     emit $ LLVM.Raw $ "L" ++ show l1 ++ ":"  
     e2' <- compileExp e2
     r2 <- getNextTempReg
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.And (typeToItype t) e1' e2')) 
+    emit $ LLVM.Ass r2 (LLVM.And (typeToItype t) e1' e2')
     emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r1
     emit $ LLVM.Goto l2
     emit $ LLVM.Raw $ "L" ++ show l2 ++ ":"    
     r3 <- getNextTempReg
-    emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.Load (typeToItype t) r1)) 
+    emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
 compileExp (ETyped (EOr e1 e2) t) = do
     l1 <- getNextLabel
     l2 <- getNextLabel
     r1 <- getNextTempReg 
-    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (typeToItype t)))
+    emit $ LLVM.Ass r1 (LLVM.Alloca (typeToItype t))
     e1' <- compileExp e1
     emit $ LLVM.Store (typeToItype t) e1' (typeToItype t) r1
     emit $ LLVM.CondB e1' l2 l1
     emit $ LLVM.Raw $ "L" ++ show l1 ++ ":"  
     e2' <- compileExp e2
     r2 <- getNextTempReg
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Or (typeToItype t) e1' e2')) 
+    emit $ LLVM.Ass r2 (LLVM.Or (typeToItype t) e1' e2') 
     emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r1
     emit $ LLVM.Goto l2
     emit $ LLVM.Raw $ "L" ++ show l2 ++ ":"    
     r3 <- getNextTempReg
-    emit $ LLVM.Ass r3 (LLVM.VVal (LLVM.showInstruction $ LLVM.Load (typeToItype t) r1)) 
+    emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
 compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     g <- setNextGlobalArr t2
@@ -443,19 +443,19 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     r5 <- getNextTempReg
     r6 <- getNextTempReg
     r7 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.VVal(LLVM.showInstruction $ LLVM.Alloca (LLVM.SSize (g++"Struct"))))
-    emit $ LLVM.Ass r4 (LLVM.VVal (LLVM.showInstruction $ LLVM.Div (typeToItype t) r3 (LLVM.VInt 8)))
+    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
+    emit $ LLVM.Ass r4 (LLVM.Div (typeToItype t) r3 (LLVM.VInt 8))
     (e':is) <- mapM compileExp e --TODO fix for dynamic array
     let f = "@calloc(i32 " ++ show e' ++ ", " ++ (showE [t2] [r4]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (LLVM.P LLVM.Byte) f)) 
-    emit $ LLVM.Ass r5 (LLVM.VVal (LLVM.showInstruction $ LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0))) 
+    emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
+    emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
     
     --Stores size of array to struct
-    emit $ LLVM.Ass r6 (LLVM.VVal (LLVM.showInstruction $ LLVM.GetElmPtr (LLVM.SSize g) r1 0 0))
+    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 0)
     emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
 
     --Stores calloc pointer to struct
-    emit $ LLVM.Ass r7 (LLVM.VVal (LLVM.showInstruction $ LLVM.GetElmPtr (LLVM.SSize g) r1 0 1))  
+    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 1)  
     emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
     return r1 
 
@@ -466,10 +466,8 @@ getHardwareSizeOfType :: Type -> CodeGen LLVM.Val
 getHardwareSizeOfType t = do
     r1 <- getNextTempReg
     r2 <- getNextTempReg
-    --r3 <- getNextTempReg
-    --emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VInt 0) (LLVM.VInt 0)))
-    emit $ LLVM.Ass r1 (LLVM.VVal (LLVM.showInstruction $ LLVM.Raw $ "getelementptr " ++ (LLVM.showSize (LLVM.P (typeToItype t))) ++ " null, i32 1"))
-    emit $ LLVM.Ass r2 (LLVM.VVal (LLVM.showInstruction $ LLVM.PtrToInt (typeToItype t) r1 (typeToItype t))) 
+    emit $ LLVM.Ass r1 (LLVM.Raw $ "getelementptr " ++ (LLVM.showSize (LLVM.P (typeToItype t))) ++ " null, i32 1")
+    emit $ LLVM.Ass r2 (LLVM.PtrToInt (typeToItype t) r1 (typeToItype t))
     return r2
 
 -- Generats and returns the code for the arguments to a code block/method.

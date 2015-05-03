@@ -26,7 +26,7 @@ data Instruction
     | Store Size Val Size Val
     | Alloca Size
     | Calloc Int Size
-    | Ass Val Val
+    | Ass Val Instruction
     | Mul Size Val Val
     | Div Size Val Val
     | Add Size Val Val
@@ -57,8 +57,8 @@ showInstruction (Load s v)          = "load " ++ showSize s ++ "* " ++ show v
 showInstruction (Store s1 v1 s2 v2) = "store " ++ showSize s1 ++ " " ++ show v1 ++ " , " ++ showSize s2 ++ "* " ++ show v2 
 showInstruction (Alloca s)          = "alloca " ++ showSize s
 showInstruction (Calloc n s)        = "call " ++ showSize s ++ "* @calloc(i32" ++ show n ++ ", i32 " ++ showSize s ++ ")"  
-showInstruction (Ass v1@(VVal v1') v2)  | head v1'=='%' =  show v1 ++ " = " ++ show v2
-                                        | otherwise = "%" ++ show v1 ++ " = " ++ show v2
+showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ showInstruction i
+                                        | otherwise = "%" ++ show v1 ++ " = " ++ showInstruction i
 showInstruction (Mul DWord v1 v2)   = "fmul " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Mul s v1 v2)       = "mul " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Div DWord v1 v2)   = "fdiv " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
