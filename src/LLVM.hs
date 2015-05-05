@@ -49,7 +49,7 @@ data Instruction
     | TwoArray Int Val Int Int
     | PtrToInt Size Val Size
     | BitCast Size Val Size
-    | GetElmPtr Size Val Int Int
+    | GetElmPtr Size Val Integer Integer
     deriving (Eq)
 
 showInstruction :: Instruction -> String 

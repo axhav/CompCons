@@ -39,7 +39,7 @@ transStmt x = case x of
   Empty  -> failure x
   BStmt block  -> failure x
   Decl type' items  -> failure x
-  Ass id expr  -> failure x
+  Ass expr1 expr2  -> failure x
   Incr id  -> failure x
   Decr id  -> failure x
   Ret expr  -> failure x

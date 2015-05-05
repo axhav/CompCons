@@ -1,7 +1,9 @@
 int main() {
 
   int[] a = new int[10];
-  int j=0;
+  //int j;
+  a[0] = 4;
+  printInt(a[0]);
 /*
   while (j<a.length) {
      a[j] = j;

@@ -79,13 +79,22 @@ checkStm s = case s of
             (ArrayT t' []) -> return (Decl t retItems)
             (ArrayT t' _)  -> fail $ "Expected empty brackets in array declaration" 
             _              -> return (Decl t retItems)
-    (Ass id expr) -> do
-        t <- lookVar id
-        ret@(ETyped e t') <- inferExp expr           
-        unless (t == t') $ fail $
-            "expected numeric type, but found " ++ printTree t ++
-            " when checking " ++ printTree id
-        return (Ass id ret)
+    (Ass e1 e2) -> do
+        case e1 of
+            (EVar id) -> do
+                t <- lookVar id
+                ret@(ETyped e t') <- inferExp e2           
+                unless (t == t') $ fail $
+                    "expected numeric type, but found " ++ printTree t ++
+                    " when checking " ++ printTree id
+                return (Ass e1 ret)
+            index@(EIndex e3 e4) -> do
+                ret@(ETyped e t) <- inferExp index
+                ret'@(ETyped e' t') <- inferExp e2
+                unless (t == t') $ fail $
+                    "expected numeric type, but found " ++ printTree t ++
+                    " when checking " ++ printTree index
+                return (Ass ret ret')
     (Incr id) -> do
         t <- lookVar id
         unless (t `elem` [Int, Doub]) $ fail $
@@ -217,7 +226,7 @@ inferExp e = case e of
         e2'@(ETyped _ t) <- inferExp e2
         unless (t == Int) $ fail $ 
             "Expected type int but found type " ++ printTree t
-        e1'@(ETyped _ t1) <- inferExp e1
+        e1'@(ETyped _ (ArrayT t1 _)) <- inferExp e1
         return (ETyped (EIndex e1' e2') t1)
     (EDot e1 e2@(EVar (Ident s)))    -> do
         unless (s /= "length") $ fail $ --TODO add general

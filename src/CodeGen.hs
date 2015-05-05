@@ -79,6 +79,11 @@ extendContext x t = modify $ updateContexts $ \ (b : bs) ->
   b { vars = Map.insert x (next b,t) (vars b)
     , next = (valAdd (next b) 1)
     } : bs
+    
+extendContextvVal :: Ident -> Type -> LLVM.Val -> CodeGen ()
+extendContextvVal id t v = modify $ updateContexts $ \ (b : bs) ->
+  b { vars = Map.insert id (v,t) (vars b)
+    } : bs
 
 -- Increment reg/label counter.    
 valAdd :: LLVM.Val -> Integer -> LLVM.Val
@@ -126,11 +131,26 @@ setNextGlobalVar s = do
 
 -- Insert new global variable into globalList and return the variable name. TODO
 setNextGlobalArr :: Type -> CodeGen String
-setNextGlobalArr t = do
+setNextGlobalArr (ArrayT t _) = do
     gl <- gets globalList
-    let gName = "%arr" ++ (show $ length gl)
-    modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
-    return gName
+    case t of
+        Int  -> do
+            let gName = "%arrInt" 
+            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
+                modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
+            return gName 
+        Doub -> do
+            let gName = "%arrDoub"
+            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $  
+                modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
+            return gName
+        Bool -> do
+            let gName = "%arrBool"
+            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
+                modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
+            return gName
+        _    -> undefined
+    
    
    
 -- * Environment
@@ -239,10 +259,16 @@ compileStm s = do
             for i
             where for (item:[]) = declHelper item t
                   for (item:items)= declHelper item t >> for items
-        (Ass id expr@(ETyped e t)) -> do
-            r <- getVarReg id
-            e' <- compileExp expr
-            emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
+        (Ass e1 expr@(ETyped e t)) -> do
+            case e1 of
+                (ETyped (EVar id) _) -> do
+                    r <- getVarReg id
+                    e' <- compileExp expr
+                    emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
+                (ETyped (EIndex e3 e4) _) -> do
+                    e1' <- compileExp e1
+                    e4' <- compileExp expr
+                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) e1'
         (Incr id) -> do
             (_,t) <- lookupVar id
             r <- getVarReg id
@@ -333,8 +359,17 @@ compileExp (ETyped (EString s) t) = do
     let l = (length s) + 1
     emit $ LLVM.Ass r2 (LLVM.TwoArray l r1 0 0)
     return r2
-compileExp (ETyped (EIndex e1 e2) t) = do
-    undefined --TODO fix this
+compileExp (ETyped (EIndex e1 e2) t) = case e1 of
+    (ETyped (EVar id) _ ) -> do
+        (r, t') <- lookupVar id
+        r1 <- getNextTempReg
+        r2 <- getNextTempReg
+        r3 <- getNextTempReg
+        emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 1)  
+        emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t') 0)) r1)
+        e2'@(LLVM.VInt i) <- compileExp e2
+        emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t') 0)) r2 0 i) 
+        return r3
 compileExp (ETyped (EDot e1 e2) t) = do 
     undefined --TODO fix this
 compileExp (ETyped (Neg e) t) = do
@@ -514,6 +549,12 @@ typeToItype Bool = LLVM.Bit
 typeToItype Void = LLVM.Void
 typeToItype (ArrayT t _) = typeToItype t
 
+typeToArrT :: Type -> LLVM.Size
+typeToArrT Int = LLVM.SSize "%arrInt"
+typeToArrT Doub = LLVM.SSize "%arrDoub"
+typeToArrT Bool = LLVM.SSize "%arrBool"
+
+
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
 declHelper :: Item -> Type -> CodeGen ()
@@ -524,12 +565,17 @@ declHelper (NoInit id) t = do
     case t of    
         Doub -> emit $ LLVM.Store (typeToItype t) (LLVM.VDoub 0.0) (typeToItype t) r
         _    -> emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r
-declHelper (Init id expr) t = do 
-    e' <- (compileExp expr)
-    extendContext id t
-    r <- getVarReg id
-    emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
-    emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
+declHelper (Init id expr) t = do
+    case expr of
+        (ETyped (EArr t1@(ArrayT t e)) t2) -> do
+            e' <- (compileExp expr)
+            extendContextvVal id t e'
+        _       -> do
+            e' <- (compileExp expr)
+            extendContext id t
+            r <- getVarReg id
+            emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+            emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
 
     
     

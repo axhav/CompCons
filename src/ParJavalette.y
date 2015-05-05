@@ -103,7 +103,7 @@ Stmt :: { Stmt }
 Stmt : ';' { Empty } 
   | Block { BStmt $1 }
   | Type ListItem ';' { Decl $1 $2 }
-  | Ident '=' Expr ';' { Ass $1 $3 }
+  | Expr '=' Expr ';' { Ass $1 $3 }
   | Ident '++' ';' { Incr $1 }
   | Ident '--' ';' { Decr $1 }
   | 'return' Expr ';' { Ret $2 }

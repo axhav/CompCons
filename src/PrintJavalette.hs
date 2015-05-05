@@ -115,7 +115,7 @@ instance Print Stmt where
    Empty  -> prPrec i 0 (concatD [doc (showString ";")])
    BStmt block -> prPrec i 0 (concatD [prt 0 block])
    Decl type' items -> prPrec i 0 (concatD [prt 0 type' , prt 0 items , doc (showString ";")])
-   Ass id expr -> prPrec i 0 (concatD [prt 0 id , doc (showString "=") , prt 0 expr , doc (showString ";")])
+   Ass expr0 expr -> prPrec i 0 (concatD [prt 0 expr0 , doc (showString "=") , prt 0 expr , doc (showString ";")])
    Incr id -> prPrec i 0 (concatD [prt 0 id , doc (showString "++") , doc (showString ";")])
    Decr id -> prPrec i 0 (concatD [prt 0 id , doc (showString "--") , doc (showString ";")])
    Ret expr -> prPrec i 0 (concatD [doc (showString "return") , prt 0 expr , doc (showString ";")])

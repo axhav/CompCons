@@ -28,7 +28,7 @@ data Stmt =
    Empty
  | BStmt Block
  | Decl Type [Item]
- | Ass Ident Expr
+ | Ass Expr Expr
  | Incr Ident
  | Decr Ident
  | Ret Expr
