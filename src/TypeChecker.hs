@@ -83,11 +83,12 @@ checkStm s = case s of
         case e1 of
             (EVar id) -> do
                 t <- lookVar id
-                ret@(ETyped e t') <- inferExp e2           
+                ret <- inferExp e1
+                ret'@(ETyped e t') <- inferExp e2           
                 unless (t == t') $ fail $
                     "expected numeric type, but found " ++ printTree t ++
                     " when checking " ++ printTree id
-                return (Ass e1 ret)
+                return (Ass ret ret')
             index@(EIndex e3 e4) -> do
                 ret@(ETyped e t) <- inferExp index
                 ret'@(ETyped e' t') <- inferExp e2

@@ -272,19 +272,19 @@ compileStm s = do
         (Incr id) -> do
             (_,t) <- lookupVar id
             r <- getVarReg id
-            (LLVM.VVal r1) <- getNextTempReg
-            emit $ LLVM.Raw $ r1 ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r) -- Load id into reg 
-            (LLVM.VVal r2) <- getNextTempReg
-            emit $ LLVM.Raw $ r2 ++ " = " ++ (LLVM.showInstruction $ LLVM.Add (typeToItype t) (LLVM.VVal r1) (LLVM.VInt 1)) -- Inc by one
-            emit $ LLVM.Store (typeToItype t) (LLVM.VVal r2) (typeToItype t) r -- Store the inc value into id
+            r1 <- getNextTempReg
+            emit $ LLVM.Ass r1 (LLVM.Load (typeToItype t) r) -- Load id into reg 
+            r2 <- getNextTempReg
+            emit $ LLVM.Ass r2 (LLVM.Add (typeToItype t) r1 (LLVM.VInt 1)) -- Inc by one
+            emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r -- Store the inc value into id
         (Decr id) -> do
             (_,t) <- lookupVar id
             r <- getVarReg id
-            (LLVM.VVal r1) <- getNextTempReg
-            emit $ LLVM.Raw $ r1 ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r) -- Load id into reg 
-            (LLVM.VVal r2) <- getNextTempReg
-            emit $ LLVM.Raw $ r2 ++ " = " ++ (LLVM.showInstruction $ LLVM.Sub  (typeToItype t) (LLVM.VVal r1) (LLVM.VInt 1)) -- Dec by one
-            emit $ LLVM.Store (typeToItype t) (LLVM.VVal r2) (typeToItype t) r -- Store the dec value into id
+            r1 <- getNextTempReg
+            emit $ LLVM.Ass r1 (LLVM.Load (typeToItype t) r) -- Load id into reg 
+            r2 <- getNextTempReg
+            emit $ LLVM.Ass r2 (LLVM.Sub  (typeToItype t) r1 (LLVM.VInt 1)) -- Dec by one
+            emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r -- Store the dec value into id
         (Ret expr@(ETyped e t)) -> do
             e' <-  (compileExp expr)
             emit $ LLVM.Return (typeToItype t) e'
@@ -339,7 +339,7 @@ compileExp (ETyped (ELitDoub d) t) = return $ LLVM.VDoub d
 compileExp (ETyped (EVar id) t) = do
     r1 <- getNextTempReg
     r <- getVarReg id
-    emit $ LLVM.Raw $ (show r1) ++ " = " ++ (LLVM.showInstruction $ LLVM.Load (typeToItype t) r)  
+    emit $ LLVM.Ass r1 (LLVM.Load (typeToItype t) r)  
     return $ r1
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     par' <- sequence $ map compileExp exps
@@ -533,11 +533,11 @@ allocateArgs :: [Arg] -> CodeGen ()
 allocateArgs [] = return ()
 allocateArgs [Arg t id] = do
     r <- getVarReg id
-    emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+    emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
     emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
 allocateArgs ((Arg t id):args) = do
     r <- getVarReg id
-    emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+    emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
     emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
     allocateArgs args
 
@@ -561,7 +561,7 @@ declHelper :: Item -> Type -> CodeGen ()
 declHelper (NoInit id) t = do
     extendContext id t
     r <- getVarReg id
-    emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+    emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
     case t of    
         Doub -> emit $ LLVM.Store (typeToItype t) (LLVM.VDoub 0.0) (typeToItype t) r
         _    -> emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r
@@ -574,7 +574,7 @@ declHelper (Init id expr) t = do
             e' <- (compileExp expr)
             extendContext id t
             r <- getVarReg id
-            emit $ LLVM.Raw $ (show r) ++ " = " ++ (LLVM.showInstruction $ LLVM.Alloca (typeToItype t))
+            emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
             emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
 
     
