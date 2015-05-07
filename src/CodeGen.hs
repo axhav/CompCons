@@ -405,10 +405,10 @@ compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     let f = ("@"++ id ++ "(" ++ par ++ ")")
     case t of
         Void -> do
-            return $ LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (typeToItype t) f)
+            return $ LLVM.VVal (LLVM.showInstruction $ LLVM.Invoke (argTy t) f)
         _    -> do
             r <- getNextTempReg
-            emit $ LLVM.Ass r (LLVM.Invoke (typeToItype t) f) 
+            emit $ LLVM.Ass r (LLVM.Invoke (argTy t) f) 
             return r
 compileExp (ETyped (EString s) t) = do
     r1 <- setNextGlobalVar s
@@ -545,7 +545,7 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     r7 <- getNextTempReg
     emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
     (e':is) <- mapM compileExp e --TODO fix for dynamic array
-    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
+    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t2)) ++ " " ++ show r3 ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
     emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
     emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
     
@@ -595,13 +595,13 @@ showA ((Arg t id):ids) = do
 showE :: [Type] -> [LLVM.Val] ->  String
 showE _ []              = "" 
 showE [Void] ([LLVM.VVal s]) = "i8* " ++ s  
-showE [t] ([LLVM.VVal s]) = (LLVM.showSize (typeToItype t)) ++ " " ++ s
-showE [t] ([LLVM.VInt i]) = (LLVM.showSize (typeToItype t)) ++ " " ++ show i
-showE [t] ([LLVM.VDoub d]) = (LLVM.showSize (typeToItype t)) ++ " " ++ show d
+showE [t] ([LLVM.VVal s]) = (LLVM.showSize (argTy t)) ++ " " ++ s
+showE [t] ([LLVM.VInt i]) = (LLVM.showSize (argTy t)) ++ " " ++ show i
+showE [t] ([LLVM.VDoub d]) = (LLVM.showSize (argTy t)) ++ " " ++ show d
 showE (Void:ts) ((LLVM.VVal s):ss) = "i8* " ++ s ++ showE ts ss
-showE (t:ts) ((LLVM.VVal s):ss) = (LLVM.showSize (typeToItype t)) ++ " " ++ s ++ " , " ++ showE ts ss
-showE (t:ts) ((LLVM.VInt i):is) = (LLVM.showSize (typeToItype t)) ++ " " ++ show i ++ " , " ++ showE ts is
-showE (t:ts) ((LLVM.VDoub d):ds) = (LLVM.showSize (typeToItype t)) ++ " " ++ show d ++ " , " ++ showE ts ds
+showE (t:ts) ((LLVM.VVal s):ss) = (LLVM.showSize (argTy t)) ++ " " ++ s ++ " , " ++ showE ts ss
+showE (t:ts) ((LLVM.VInt i):is) = (LLVM.showSize (argTy t)) ++ " " ++ show i ++ " , " ++ showE ts is
+showE (t:ts) ((LLVM.VDoub d):ds) = (LLVM.showSize (argTy t)) ++ " " ++ show d ++ " , " ++ showE ts ds
 
 -- Saves/allocates the arguemnts register onto the stack.
 allocateArgs :: [Arg] -> CodeGen ()
