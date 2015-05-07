@@ -162,6 +162,16 @@ checkStm s = case s of
             _                   ->
                 setReturn (preret)
         return  (While expr' stm') 
+    (ForEach t id expr stm) -> do
+        newBlock
+        checkDupe id
+        extendCont id t
+        expr'@(ETyped _ (ArrayT t2 _)) <- inferExp expr
+        unless (t == t2) $ fail $ "Array has type " ++ printTree t2 ++ 
+            " but variable in for each statment has type " ++ printTree t
+        stm' <- checkStm stm
+        exitBlock     
+        return (ForEach t id expr' stm')
     (SExp expr) -> do 
         e <- (inferExp expr)
         return (SExp e )
@@ -230,8 +240,8 @@ inferExp e = case e of
         e1'@(ETyped _ (ArrayT t1 _)) <- inferExp e1
         return (ETyped (EIndex e1' e2') t1)
     (EDot e1 e2@(EVar (Ident s)))    -> do
-        unless (s /= "length") $ fail $ --TODO add general
-            "Expected lenght after do but found " ++ printTree e2
+        unless (s == "length") $ fail $ --TODO add general
+            "Expected length after do but found " ++ printTree e2
         e1' <- inferExp e1
         return (ETyped (EDot e1' e2) Int)
     (Neg expr)      -> do

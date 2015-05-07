@@ -36,6 +36,7 @@ data Stmt =
  | Cond Expr Stmt
  | CondElse Expr Stmt Stmt
  | While Expr Stmt
+ | ForEach Type Ident Expr Stmt
  | SExp Expr
   deriving (Eq,Ord,Show,Read)
 

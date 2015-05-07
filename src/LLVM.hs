@@ -49,7 +49,7 @@ data Instruction
     | TwoArray Int Val Int Int
     | PtrToInt Size Val Size
     | BitCast Size Val Size
-    | GetElmPtr Size Val Integer Integer
+    | GetElmPtr Size Val Integer Val
     deriving (Eq)
 
 showInstruction :: Instruction -> String 
@@ -87,7 +87,7 @@ showInstruction (GStruct s n)       = n ++ " = type " ++ n ++ "Struct*\n" ++ n +
 showInstruction (TwoArray i1 v i2 i3) = "getelementptr [" ++ show i1 ++ " x i8]* " ++ show v ++ " , i32 " ++ show i2 ++ " , i32 " ++ show i3
 showInstruction (PtrToInt s1 v2 s2) = "ptrtoint " ++ showSize s1 ++ "* " ++ show v2 ++ " to " ++ showSize s2
 showInstruction (BitCast s1 v2 s2)  = "bitcast " ++ showSize s1 ++ " " ++ show v2 ++ " to " ++ showSize s2
-showInstruction (GetElmPtr s1 v i1 i2) = "getelementptr " ++ showSize s1 ++ " " ++ show v ++ ", i32 " ++ show i1 ++ " , i32 " ++ show i2
+showInstruction (GetElmPtr s1 v i1 v2) = "getelementptr " ++ showSize s1 ++ " " ++ show v ++ ", i32 " ++ show i1 ++ " , i32 " ++ show v2
 
 
 showSize :: Size -> String

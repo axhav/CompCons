@@ -43,16 +43,17 @@ import ErrM
   'double' { PT _ (TS _ 26) }
   'else' { PT _ (TS _ 27) }
   'false' { PT _ (TS _ 28) }
-  'if' { PT _ (TS _ 29) }
-  'int' { PT _ (TS _ 30) }
-  'new' { PT _ (TS _ 31) }
-  'return' { PT _ (TS _ 32) }
-  'true' { PT _ (TS _ 33) }
-  'void' { PT _ (TS _ 34) }
-  'while' { PT _ (TS _ 35) }
-  '{' { PT _ (TS _ 36) }
-  '||' { PT _ (TS _ 37) }
-  '}' { PT _ (TS _ 38) }
+  'for' { PT _ (TS _ 29) }
+  'if' { PT _ (TS _ 30) }
+  'int' { PT _ (TS _ 31) }
+  'new' { PT _ (TS _ 32) }
+  'return' { PT _ (TS _ 33) }
+  'true' { PT _ (TS _ 34) }
+  'void' { PT _ (TS _ 35) }
+  'while' { PT _ (TS _ 36) }
+  '{' { PT _ (TS _ 37) }
+  '||' { PT _ (TS _ 38) }
+  '}' { PT _ (TS _ 39) }
 
 L_ident  { PT _ (TV $$) }
 L_integ  { PT _ (TI $$) }
@@ -111,6 +112,7 @@ Stmt : ';' { Empty }
   | 'if' '(' Expr ')' Stmt { Cond $3 $5 }
   | 'if' '(' Expr ')' Stmt 'else' Stmt { CondElse $3 $5 $7 }
   | 'while' '(' Expr ')' Stmt { While $3 $5 }
+  | 'for' '(' Type Ident ':' Expr ')' Stmt { ForEach $3 $4 $6 $8 }
   | Expr ';' { SExp $1 }
 
 
@@ -152,7 +154,7 @@ Expr6 : Ident { EVar $1 }
   | 'false' { ELitFalse }
   | Ident '(' ListExpr ')' { EApp $1 $3 }
   | String { EString $1 }
-  | Expr6 '[' Expr6 ']' { EIndex $1 $3 }
+  | Expr6 '[' Expr2 ']' { EIndex $1 $3 }
   | Expr6 '.' Expr6 { EDot $1 $3 }
   | '(' Expr ')' { $2 }
 

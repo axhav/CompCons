@@ -118,7 +118,9 @@ getNextTempReg = do
 getVarReg :: Ident -> CodeGen LLVM.Val
 getVarReg id = do
     (r,_) <- lookupVar id
-    return (LLVM.VVal ("%r"++show r))
+    case head (show r) of
+        '%' -> return (LLVM.VVal (show r))  
+        _ -> return (LLVM.VVal ("%r"++show r))
 
 -- Insert new global variable into globalList and return the variable name.
 setNextGlobalVar :: String -> CodeGen LLVM.Val
@@ -222,7 +224,7 @@ compileDef :: TopDef -> CodeGen ()
 compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
     newBlock     
     args' <- showA args
-    emit $ LLVM.Raw $ "define " ++ LLVM.showSize (typeToItype t) ++ " @"++ id ++ "(" ++ args' ++ ") {"
+    emit $ LLVM.Raw $ "define " ++ LLVM.showSize (argTy t) ++ " @"++ id ++ "(" ++ args' ++ ") {"
     allocateArgs args
     case t of
          Void -> do -- For adding return stament in void functions.
@@ -265,10 +267,20 @@ compileStm s = do
                     r <- getVarReg id
                     e' <- compileExp expr
                     emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
-                (ETyped (EIndex e3 e4) _) -> do
-                    e1' <- compileExp e1
-                    e4' <- compileExp expr
-                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) e1'
+                (ETyped (EIndex (ETyped (EVar id) _) e4) t') -> do
+                    (r, _) <- lookupVar id
+                    --r <- getVarReg id
+                    r1 <- getNextTempReg
+                    r2 <- getNextTempReg
+                    r3 <- getNextTempReg
+                    emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1))  
+                    emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t') 0)) r1)
+                    i <- compileExp e4
+                    emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t') 0)) r2 0 i) 
+                    e4' <- compileExp expr 
+                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r3    
+                _ -> do
+                    fail $ printTree s
         (Incr id) -> do
             (_,t) <- lookupVar id
             r <- getVarReg id
@@ -287,7 +299,7 @@ compileStm s = do
             emit $ LLVM.Store (typeToItype t) r2 (typeToItype t) r -- Store the dec value into id
         (Ret expr@(ETyped e t)) -> do
             e' <-  (compileExp expr)
-            emit $ LLVM.Return (typeToItype t) e'
+            emit $ LLVM.Return (argTy t) e'
         (VRet) -> do
             emit $ LLVM.VReturn
         (Cond expr@(ETyped e' t) stm) -> do
@@ -323,7 +335,48 @@ compileStm s = do
             emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
             compileStm stm
             emit $ LLVM.Goto l1
-            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while          
+            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while
+        (ForEach t id e@(ETyped (EVar id1) t1) stm) -> do
+            extendContext id t
+            l1 <- getNextLabel
+            l2 <- getNextLabel
+            l3 <- getNextLabel
+            r1 <- getNextTempReg
+            r2 <- getNextTempReg
+            r3 <- getVarReg id
+            r4 <- getNextTempReg
+            r5 <- getNextTempReg
+            r6 <- getNextTempReg
+            r7 <- getNextTempReg
+            r8 <- getNextTempReg
+            r9 <- getNextTempReg
+            r10 <- getNextTempReg
+            r11 <- getNextTempReg
+            --(r, t2) <- lookupVar id1
+            r <- getVarReg id1
+
+            -- Init of variable for forEach loop
+            emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 0)) -- arraySize
+            emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
+            emit $ LLVM.Ass r3 (LLVM.Alloca (typeToItype t))
+            emit $ LLVM.Ass r4 (LLVM.Alloca LLVM.Word)
+            emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r4   
+            emit $ LLVM.Goto l1
+            emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
+            emit $ LLVM.Ass r6 (LLVM.Load (typeToItype t) r4)            
+            emit $ LLVM.Ass r5 (LLVM.Compare LLVM.Eq LLVM.Word r2 r6)
+            emit $ LLVM.CondB r5 l3 l2  
+            emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
+            emit $ LLVM.Ass r7 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1)) -- arrayPointer
+            emit $ LLVM.Ass r8 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t1) 0)) r7)
+            emit $ LLVM.Ass r9 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t1) 0)) r8 0 r6)
+            emit $ LLVM.Ass r10 (LLVM.Load (typeToItype t1) r9)
+            emit $ LLVM.Store (typeToItype t) r10 (typeToItype t) r3   
+            compileStm stm
+            emit $ LLVM.Ass r11 (LLVM.Add LLVM.Word r6 (LLVM.VInt 1))
+            emit $ LLVM.Store LLVM.Word r11 LLVM.Word r4   
+            emit $ LLVM.Goto l1
+            emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of forEach          
         (SExp expr) -> do
             e <- compileExp expr
             case e of
@@ -339,7 +392,7 @@ compileExp (ETyped (ELitDoub d) t) = return $ LLVM.VDoub d
 compileExp (ETyped (EVar id) t) = do
     r1 <- getNextTempReg
     r <- getVarReg id
-    emit $ LLVM.Ass r1 (LLVM.Load (typeToItype t) r)  
+    emit $ LLVM.Ass r1 (LLVM.Load (argTy t) r)  
     return $ r1
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     par' <- sequence $ map compileExp exps
@@ -361,17 +414,26 @@ compileExp (ETyped (EString s) t) = do
     return r2
 compileExp (ETyped (EIndex e1 e2) t) = case e1 of
     (ETyped (EVar id) _ ) -> do
-        (r, t') <- lookupVar id
+        --(r, t') <- lookupVar id
+        r <- getVarReg id
         r1 <- getNextTempReg
         r2 <- getNextTempReg
         r3 <- getNextTempReg
-        emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 1)  
-        emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t') 0)) r1)
-        e2'@(LLVM.VInt i) <- compileExp e2
-        emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t') 0)) r2 0 i) 
-        return r3
-compileExp (ETyped (EDot e1 e2) t) = do 
-    undefined --TODO fix this
+        r4 <- getNextTempReg
+        emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1))  
+        emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
+        e2' <- compileExp e2
+        emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e2') 
+        emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
+        return r4
+compileExp (ETyped (EDot e1@(ETyped (EVar id) _) e2) t) = do 
+    --(r, t') <- lookupVar id
+    r <- getVarReg id
+    r1 <- getNextTempReg
+    r2 <- getNextTempReg
+    emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 0))
+    emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
+    return r2
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
     r <- getNextTempReg 
@@ -474,23 +536,21 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     r1 <- getNextTempReg
     r2 <- getNextTempReg
     r3 <- getHardwareSizeOfType t2
-    r4 <- getNextTempReg
     r5 <- getNextTempReg
     r6 <- getNextTempReg
     r7 <- getNextTempReg
     emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
-    emit $ LLVM.Ass r4 (LLVM.Div (typeToItype t) r3 (LLVM.VInt 8))
     (e':is) <- mapM compileExp e --TODO fix for dynamic array
-    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (showE [t2] [r4]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
+    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
     emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
     emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
     
     --Stores size of array to struct
-    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 0)
+    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 0))
     emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
 
     --Stores calloc pointer to struct
-    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 1)  
+    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
     emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
     return r1 
 
@@ -510,11 +570,11 @@ showA :: [Arg] -> CodeGen String
 showA []           = return ""
 showA ([Arg t id]) = do
     extendContext id t
-    return $ LLVM.showSize (typeToItype t) ++ " %" ++ printTree id
+    return $ LLVM.showSize (argTy t) ++ " %" ++ printTree id
 showA ((Arg t id):ids) = do
     extendContext id t
     temp <- showA ids
-    return $ LLVM.showSize (typeToItype t) ++ " %" ++ printTree id ++ " , " ++ temp
+    return $ LLVM.showSize (argTy t) ++ " %" ++ printTree id ++ " , " ++ temp
 
 -- Generats and returns the code for the arguments/input variables for method calls
 showE :: [Type] -> [LLVM.Val] ->  String
@@ -531,15 +591,19 @@ showE (t:ts) ((LLVM.VDoub d):ds) = (LLVM.showSize (typeToItype t)) ++ " " ++ sho
 -- Saves/allocates the arguemnts register onto the stack.
 allocateArgs :: [Arg] -> CodeGen ()
 allocateArgs [] = return ()
-allocateArgs [Arg t id] = do
-    r <- getVarReg id
-    emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
-    emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
-allocateArgs ((Arg t id):args) = do
-    r <- getVarReg id
-    emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
-    emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
-    allocateArgs args
+allocateArgs [Arg t id] = case t of
+    (ArrayT _ _) -> blank
+    _ -> do
+        r <- getVarReg id
+        emit $ LLVM.Ass r (LLVM.Alloca (argTy t))
+        emit $ LLVM.Store (argTy t) (LLVM.VVal ("%"++printTree id)) (argTy t) r
+allocateArgs ((Arg t id):args) = case t of
+    (ArrayT _ _) -> allocateArgs args
+    _ -> do
+        r <- getVarReg id
+        emit $ LLVM.Ass r (LLVM.Alloca (argTy t))
+        emit $ LLVM.Store (argTy t) (LLVM.VVal ("%"++printTree id)) (argTy t) r
+        allocateArgs args
 
 -- Contverts from Type to LLVM types.
 typeToItype :: Type -> LLVM.Size
@@ -554,7 +618,9 @@ typeToArrT Int = LLVM.SSize "%arrInt"
 typeToArrT Doub = LLVM.SSize "%arrDoub"
 typeToArrT Bool = LLVM.SSize "%arrBool"
 
-
+argTy :: Type -> LLVM.Size
+argTy (ArrayT t _) = typeToArrT t
+argTy t = typeToItype t
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
 declHelper :: Item -> Type -> CodeGen ()

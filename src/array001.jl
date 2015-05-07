@@ -2,8 +2,10 @@ int main() {
 
   int[] a = new int[10];
   //int j;
-  a[0] = 4;
-  printInt(a[0]);
+  a[4] = 4;
+  
+  for (int x : a) printInt(x);
+  //printInt(a.length);
 /*
   while (j<a.length) {
      a[j] = j;
