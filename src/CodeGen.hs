@@ -266,7 +266,7 @@ compileStm s = do
                 (ETyped (EVar id) _) -> do
                     r <- getVarReg id
                     e' <- compileExp expr
-                    emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
+                    emit $ LLVM.Store (argTy t) e' (argTy t) r
                 (ETyped (EIndex (ETyped (EVar id) _) e4) t') -> do
                     --(r, _) <- lookupVar id
                     r <- getVarReg id
@@ -655,8 +655,8 @@ declHelper (Init id expr) t = do
             e' <- (compileExp expr)
             extendContext id t
             r <- getVarReg id
-            emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
-            emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
+            emit $ LLVM.Ass r (LLVM.Alloca (argTy t))
+            emit $ LLVM.Store (argTy t) e' (argTy t) r
 
     
     
