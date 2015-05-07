@@ -268,8 +268,8 @@ compileStm s = do
                     e' <- compileExp expr
                     emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
                 (ETyped (EIndex (ETyped (EVar id) _) e4) t') -> do
-                    (r, _) <- lookupVar id
-                    --r <- getVarReg id
+                    --(r, _) <- lookupVar id
+                    r <- getVarReg id
                     r1 <- getNextTempReg
                     r2 <- getNextTempReg
                     r3 <- getNextTempReg
@@ -389,11 +389,15 @@ compileExp (ETyped (ELitTrue) t) = return $ LLVM.VInt 1
 compileExp (ETyped (ELitFalse) t) = return $ LLVM.VInt 0
 compileExp (ETyped (ELitInt i) t) = return $ LLVM.VInt i
 compileExp (ETyped (ELitDoub d) t) = return $ LLVM.VDoub d
-compileExp (ETyped (EVar id) t) = do
-    r1 <- getNextTempReg
-    r <- getVarReg id
-    emit $ LLVM.Ass r1 (LLVM.Load (argTy t) r)  
-    return $ r1
+compileExp (ETyped (EVar id) t) = case t of
+    (ArrayT _ _) -> do
+        r <- getVarReg id
+        return $ r
+    _ -> do
+        r1 <- getNextTempReg
+        r <- getVarReg id
+        emit $ LLVM.Ass r1 (LLVM.Load (typeToItype t) r)   
+        return $ r1
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     par' <- sequence $ map compileExp exps
     let types = map (\ (ETyped e t) -> t ) exps     
@@ -570,11 +574,22 @@ showA :: [Arg] -> CodeGen String
 showA []           = return ""
 showA ([Arg t id]) = do
     extendContext id t
-    return $ LLVM.showSize (argTy t) ++ " %" ++ printTree id
+    case t of
+        (ArrayT t1 e1) -> do
+            r <- getVarReg id
+            return $ LLVM.showSize (argTy t) ++ " " ++ show r  
+        _ -> do
+            return $ LLVM.showSize (argTy t) ++ " %" ++ printTree id
 showA ((Arg t id):ids) = do
     extendContext id t
-    temp <- showA ids
-    return $ LLVM.showSize (argTy t) ++ " %" ++ printTree id ++ " , " ++ temp
+    case t of
+        (ArrayT t1 e1) -> do
+            r <- getVarReg id
+            temp <- showA ids
+            return $ LLVM.showSize (argTy t) ++ " " ++ show r ++ " , " ++ temp
+        _ -> do
+            temp <- showA ids
+            return $ LLVM.showSize (argTy t) ++ " %" ++ printTree id ++ " , " ++ temp
 
 -- Generats and returns the code for the arguments/input variables for method calls
 showE :: [Type] -> [LLVM.Val] ->  String
@@ -595,14 +610,14 @@ allocateArgs [Arg t id] = case t of
     (ArrayT _ _) -> blank
     _ -> do
         r <- getVarReg id
-        emit $ LLVM.Ass r (LLVM.Alloca (argTy t))
-        emit $ LLVM.Store (argTy t) (LLVM.VVal ("%"++printTree id)) (argTy t) r
+        emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
+        emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
 allocateArgs ((Arg t id):args) = case t of
     (ArrayT _ _) -> allocateArgs args
     _ -> do
         r <- getVarReg id
-        emit $ LLVM.Ass r (LLVM.Alloca (argTy t))
-        emit $ LLVM.Store (argTy t) (LLVM.VVal ("%"++printTree id)) (argTy t) r
+        emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
+        emit $ LLVM.Store (typeToItype t) (LLVM.VVal ("%"++printTree id)) (typeToItype t) r
         allocateArgs args
 
 -- Contverts from Type to LLVM types.
