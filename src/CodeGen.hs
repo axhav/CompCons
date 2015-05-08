@@ -658,8 +658,8 @@ declHelper (Init id expr) t = do
             e' <- (compileExp expr)
             extendContext id t
             r <- getVarReg id
-            emit $ LLVM.Ass r (LLVM.Alloca (argTy t))
-            emit $ LLVM.Store (argTy t) e' (argTy t) r
+            emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
+            emit $ LLVM.Store (typeToItype t) e' (typeToItype t) r
 
     
     
