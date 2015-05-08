@@ -15,4 +15,5 @@ clean:
 	-rm -f DocJavalette.ps
 	-rm -f ../jlc ../lib/*.bc ../*.out
 	-rm -f ../testsuite/good/*.bc ../testsuite/good/*.ll ../testsuite/good/*.o
+	-rm -f ../testsuite/extensions/arrays1/*.bc ../testsuite/extensions/arrays1/*.ll ../testsuite/extensions/arrays1/*.o
 

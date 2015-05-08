@@ -651,6 +651,9 @@ declHelper (Init id expr) t = do
         (ETyped (EArr t1@(ArrayT t e)) t2) -> do
             e' <- (compileExp expr)
             extendContextvVal id t e'
+        (ETyped (EApp id1 e1s) (ArrayT t2 _)) -> do
+            e' <- (compileExp expr)
+            extendContextvVal id t e'    
         _       -> do
             e' <- (compileExp expr)
             extendContext id t
