@@ -543,6 +543,8 @@ compileExp (ETyped (EOr e1 e2) t) = do
     emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
 compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
+    r1 <- test t1 t2
+{-
     g <- setNextGlobalArr t2
     r1 <- getNextTempReg
     r2 <- getNextTempReg
@@ -564,9 +566,75 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     --Stores calloc pointer to struct
     emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
     emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
+-}
     return r1 
 
 -- * Helps functions for the code generator.
+
+test :: Type -> Type -> CodeGen LLVM.Val
+test t t2= case t of
+    ArrayT t'@(ArrayT t2' e2) e -> do
+        l1 <- getNextLabel
+        l2 <- getNextLabel
+        l3 <- getNextLabel
+        r1 <- getNextTempReg
+        r2 <- getNextTempReg        
+        r3 <- getNextTempReg
+        r4 <- getNextTempReg
+        r5 <- getNextTempReg
+        r6 <- getNextTempReg
+        ret <-emitArray t' t2      
+
+        emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) ret 0 (LLVM.VInt 0))
+        emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
+
+        emit $ LLVM.Ass r3 (LLVM.Alloca LLVM.Word)
+        emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r3  
+        emit $ LLVM.Goto l1
+        emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
+        emit $ LLVM.Ass r5 (LLVM.Load (typeToItype t) r3)            
+        emit $ LLVM.Ass r4 (LLVM.Compare LLVM.Eq LLVM.Word r2 r5)
+        emit $ LLVM.CondB r4 l2 l3  
+        emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
+
+
+        test t' t2
+        
+        emit $ LLVM.Ass r6 (LLVM.Add LLVM.Word r5 (LLVM.VInt 1))
+        emit $ LLVM.Store LLVM.Word r6 LLVM.Word r4   
+        emit $ LLVM.Goto l1
+        emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while
+        return ret        
+
+    ArrayT t' e -> do
+        ret <- emitArray t t2
+        return ret
+        
+    
+emitArray :: Type -> Type -> CodeGen LLVM.Val
+emitArray t1@(ArrayT t e) t2 = do
+    g <- setNextGlobalArr t2
+    r1 <- getNextTempReg
+    r2 <- getNextTempReg
+    r3 <- getHardwareSizeOfType t2
+    r5 <- getNextTempReg
+    r6 <- getNextTempReg
+    r7 <- getNextTempReg
+    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
+    --arrayDecHelper t1 r3 g
+    (e':is) <- mapM compileExp e --TODO fix for dynamic array
+    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t2)) ++ " " ++ show r3 ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
+    emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
+    emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
+    
+    --Stores size of array to struct
+    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 0))
+    emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
+
+    --Stores calloc pointer to struct
+    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
+    emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
+    return r1
 
 {-arrayDecHelper :: Type -> LLVM.Val -> String -> CodeGen LLVM.Val
 arrayDecHelper (ArrayT t@(ArrayT t1 e1) e2) rHSize g = do
@@ -674,9 +742,10 @@ typeToItype Void = LLVM.Void
 typeToItype (ArrayT t _) = typeToItype t
 
 typeToArrT :: Type -> LLVM.Size
-typeToArrT Int = LLVM.SSize "%arrInt"
-typeToArrT Doub = LLVM.SSize "%arrDoub"
-typeToArrT Bool = LLVM.SSize "%arrBool"
+typeToArrT Int = LLVM.SSize "%arrInt0"
+typeToArrT Doub = LLVM.SSize "%arrDoub0"
+typeToArrT Bool = LLVM.SSize "%arrBool0"
+typeToArrT (ArrayT t1 e) = LLVM.SSize (((\(LLVM.SSize x) -> takeWhile (not.isDigit) x) (typeToArrT t1)) ++(show ( sum (zipWith (*) ( reverse ( map digitToInt ((\(LLVM.SSize x) -> filter isDigit x) (typeToArrT t1)))) [1,10..])))) 
 
 argTy :: Type -> LLVM.Size
 argTy (ArrayT t _) = typeToArrT t
