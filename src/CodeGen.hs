@@ -5,6 +5,7 @@ import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Char
 
 import AbsJavalette
 import PrintJavalette
@@ -137,24 +138,32 @@ setNextGlobalArr (ArrayT t _) = do
     gl <- gets globalList
     case t of
         Int  -> do
-            let gName = "%arrInt" 
+            let gName = "%arrInt0" 
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
                 modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
             return gName 
         Doub -> do
-            let gName = "%arrDoub"
+            let gName = "%arrDoub0"
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $  
                 modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
             return gName
         Bool -> do
-            let gName = "%arrBool"
+            let gName = "%arrBool0"
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
                 modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
             return gName
-        _    -> undefined
+        ArrayT t1 e1 -> do
+            setNextGlobalArr t
+            ((LLVM.GStruct _ gl1):gls) <- gets globalList
+            let typeName = takeWhile (\x -> not (isNumber x) ) gl1
+            let index =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
+            let gName = "%arrInt" ++ show (index+1) 
+            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
+                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
+            return gName 
+        _    -> fail $"asdasfsafasd" --undefined
     
-   
-   
+ 
 -- * Environment
 
 emptyEnv :: Env
@@ -418,7 +427,6 @@ compileExp (ETyped (EString s) t) = do
     return r2
 compileExp (ETyped (EIndex e1 e2) t) = case e1 of
     (ETyped (EVar id) _ ) -> do
-        --(r, t') <- lookupVar id
         r <- getVarReg id
         r1 <- getNextTempReg
         r2 <- getNextTempReg
@@ -431,7 +439,6 @@ compileExp (ETyped (EIndex e1 e2) t) = case e1 of
         emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
         return r4
 compileExp (ETyped (EDot e1@(ETyped (EVar id) _) e2) t) = do 
-    --(r, t') <- lookupVar id
     r <- getVarReg id
     r1 <- getNextTempReg
     r2 <- getNextTempReg
@@ -544,6 +551,7 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     r6 <- getNextTempReg
     r7 <- getNextTempReg
     emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
+    --arrayDecHelper t1 r3 g
     (e':is) <- mapM compileExp e --TODO fix for dynamic array
     let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t2)) ++ " " ++ show r3 ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
     emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
@@ -559,6 +567,43 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
     return r1 
 
 -- * Helps functions for the code generator.
+
+{-arrayDecHelper :: Type -> LLVM.Val -> String -> CodeGen LLVM.Val
+arrayDecHelper (ArrayT t@(ArrayT t1 e1) e2) rHSize g = do
+    arrayDecHelper t rHSize g
+    (LLVM.VInt i:is) <- mapM compileExp e1
+    r <- helper i g rHSize e2 t1
+    return r
+        
+arrayDecHelper t@(ArrayT t1 e1) rHSize g = do
+    r <- helper 0 g rHSize e1 t1
+    return r
+     
+helper :: Integer -> String -> LLVM.Val -> [Expr] -> Type -> CodeGen LLVM.Val
+helper i g rHSize e t = do
+    r1 <- getNextTempReg
+    r2 <- getNextTempReg
+    r5 <- getNextTempReg
+    r6 <- getNextTempReg
+    r7 <- getNextTempReg
+    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
+    (e':is) <- mapM compileExp e --TODO fix for dynamic array
+    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t)) ++ " " ++ show rHSize ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
+    emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
+    emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
+    
+    --Stores size of array to struct
+    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 0))
+    emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
+
+    --Stores calloc pointer to struct
+    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
+    emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
+    case i of
+        0 -> return r1
+        _ -> helper (i-1) (gx ++ show (gi -1)) rHSize e t-}
+    
+    
 
 -- Returns the size of type inside a register.
 getHardwareSizeOfType :: Type -> CodeGen LLVM.Val

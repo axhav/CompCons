@@ -1,10 +1,11 @@
 int main() {
 
-  int[] a = new int[10];
+  int[][] a = new int[10][4];
+
   //int j;
-  a[4] = 4;
+  //a[4] = 4;
   
-  for (int x : a) printInt(x);
+  //for (int x : a) printInt(x);
   //printInt(a.length);
 /*
   while (j<a.length) {

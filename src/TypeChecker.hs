@@ -267,16 +267,26 @@ inferExp e = case e of
         return (ETyped  (EOr e1' e2') t)
     (EArr t@(ArrayT t' _))      -> do
         expr <- inferType t
-        return (ETyped (EArr expr) (ArrayT t' []))
+        return (ETyped (EArr expr) (findArrType t))
 
 inferType :: Type -> EnvM Type
 inferType t = case t of
+    (ArrayT t1@(ArrayT t1' e') e) -> do
+        expr <- mapM inferExp e
+        rt <- inferType t1
+        mapM (\(ETyped _ t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
+        return (ArrayT rt expr)       
     (ArrayT t' e) -> do
         expr <- mapM inferExp e
-        mapM (\(ETyped e' t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
+        mapM (\(ETyped _ t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
         return (ArrayT t' expr)
     _             -> fail $ "Expected array decleration but found " ++ printTree t
     
+findArrType:: Type -> Type
+findArrType Int = Int 
+findArrType Doub = Doub
+findArrType Bool = Bool
+findArrType (ArrayT t _) = ArrayT (findArrType t) []
 
 -- Used to compare the type of numerical expression and makes it 
 -- return the type of the inputted ones
