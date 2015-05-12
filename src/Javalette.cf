@@ -60,13 +60,21 @@ Bool.      Type ::= "boolean" ;
 
 Void.      Type ::= "void" ;
 
-ArrayT.    Type ::= Type "[" [Expr] "]";
+ArrayT.    Type ::= Type  "[" [Expr] "]" ;
+
+--ArrayT.    Type ::= Type Bracket ;
 
 internal   Fun. Type ::= Type "(" [Type] ")" ;
 
 internal   ETyped. Expr ::= "[" Expr ":" Type "]" ;
 
 separator  Type "," ;
+
+-- Handeling Brackets ---------------------------------------
+
+--MultiBrack. Bracket ::= "[" [Expr] "]" Bracket;
+
+--NoBrack.    Bracket ::= ;
 
 -- Expressions ---------------------------------------------
 

@@ -265,10 +265,30 @@ inferExp e = case e of
     (EOr e1 e2)     -> do
         (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EOr e1' e2') t)
-    (EArr t@(ArrayT t' _))      -> do
+    (EArr t@(ArrayT t' _)) -> do
+        --fail $ printTree t
+        --er <- asd t Void
+        --fail $ printTree er
         expr <- inferType t
         return (ETyped (EArr expr) (findArrType t))
 
+asd :: Type -> Type -> EnvM Type 
+asd t1@(ArrayT t1' e1') t2 = case t2 of
+    Void -> do
+        ret <- asd t1' t1 
+        return (ArrayT ret e1') 
+    ArrayT t' e' -> do
+        ret@(ArrayT t e) <- asd t1' t1
+        return (ArrayT ret e1')
+    _ -> do
+        return t1
+asd t1 t2 = case t2 of
+    _ -> do
+        return t1        
+    
+        
+
+-- Infer a certain type.
 inferType :: Type -> EnvM Type
 inferType t = case t of
     (ArrayT t1@(ArrayT t1' e') e) -> do
@@ -281,7 +301,8 @@ inferType t = case t of
         mapM (\(ETyped _ t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
         return (ArrayT t' expr)
     _             -> fail $ "Expected array decleration but found " ++ printTree t
-    
+
+-- Help function to find the type of an array.    
 findArrType:: Type -> Type
 findArrType Int = Int 
 findArrType Doub = Doub

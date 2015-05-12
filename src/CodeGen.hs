@@ -153,7 +153,15 @@ setNextGlobalArr (ArrayT t _) = do
                 modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
             return gName
         ArrayT t1 e1 -> do
-            --setNextGlobalArr 
+            setNextGlobalArr t
+            ((LLVM.GStruct _ gl1):gls) <- gets globalList
+            let typeName = takeWhile (\x -> not (isNumber x) ) gl1
+            let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
+            let gName = "%arrInt" ++ show (index+1)
+            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $
+                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
+            return gName 
+            {--setNextGlobalArr 
             (gl') <- gets globalList
             case gl' of
                 (LLVM.GStruct _ gl1):gls -> do
@@ -164,7 +172,7 @@ setNextGlobalArr (ArrayT t _) = do
                         modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
                     return gName 
                 _ -> do
-                    setNextGlobalArr t
+                    setNextGlobalArr t-}
         _    -> fail $"asdasfsafasd" --undefined
     
  
@@ -547,7 +555,10 @@ compileExp (ETyped (EOr e1 e2) t) = do
     emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
 compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
-    r1 <- test t1 t2
+    g <- setNextGlobalArr t2
+    --let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') g)))) [1,10..]]
+    r1 <- test t1 t2 0 g
+
 {-
     g <- setNextGlobalArr t2
     r1 <- getNextTempReg
@@ -575,8 +586,8 @@ compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
 
 -- * Helps functions for the code generator.
 
-test :: Type -> Type -> CodeGen LLVM.Val
-test t t2= case t of
+test :: Type -> Type -> Int -> String -> CodeGen LLVM.Val
+test t t2 i g = case t of
     ArrayT t'@(ArrayT t2' e2) e -> do
         l1 <- getNextLabel
         l2 <- getNextLabel
@@ -587,10 +598,10 @@ test t t2= case t of
         r4 <- getNextTempReg
         r5 <- getNextTempReg
         r6 <- getNextTempReg
-        ret <-emitArray t t2      
+        ret <- emitArray t t2 i g     
 
         emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) ret 0 (LLVM.VInt 0))
-        emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
+        emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1) --TODO maybe not print multi times?
 
         emit $ LLVM.Ass r3 (LLVM.Alloca LLVM.Word)
         emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r3  
@@ -602,48 +613,48 @@ test t t2= case t of
         emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
 
 
-        test t' t2
+        test t' t2 (i+1) g
         
         emit $ LLVM.Ass r6 (LLVM.Add LLVM.Word r5 (LLVM.VInt 1))
         emit $ LLVM.Store LLVM.Word r6 LLVM.Word r4   
         emit $ LLVM.Goto l1
         emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while
         return ret        
-
     ArrayT t' e -> do
-        ret <- emitArray t t2
+        ret <- emitArray t t2 i g
         return ret
-        
-    
-emitArray :: Type -> Type -> CodeGen LLVM.Val
-emitArray t1@(ArrayT t e) t2 = do
-    g <- setNextGlobalArr t2
+
+  
+emitArray :: Type -> Type -> Int -> String -> CodeGen LLVM.Val
+emitArray t1@(ArrayT t e) t2 i g = do
+    let typeName = takeWhile (\x -> not (isNumber x) ) g
+    let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') g)))) [1,10..]]
+    let g' = typeName ++ show (j-i)
+    let g'' = typeName ++ show (j-i-1)
     r1 <- getNextTempReg
     r2 <- getNextTempReg
     r3 <- getHardwareSizeOfType t2
     r5 <- getNextTempReg
     r6 <- getNextTempReg
     r7 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
+    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g'++"Struct")))
     --arrayDecHelper t1 r3 g
     (e':is) <- mapM compileExp e --TODO fix for dynamic array
     let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t2)) ++ " " ++ show r3 ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
     emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
     case t of
-        ArrayT t'' e'' -> emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (LLVM.SSize g) 0)) 
+        ArrayT t'' e'' -> emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (LLVM.SSize g'') 0)) 
         _ ->  emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
     --Stores size of array to struct
-   
-    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 0))
+    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g') r1 0 (LLVM.VInt 0))
     emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
     
     --Stores calloc pointer to struct
-    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
+    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g') r1 0 (LLVM.VInt 1))  
     case t of
-        (ArrayT t'' e'') -> emit $ LLVM.Store (LLVM.P (LLVM.A (LLVM.SSize g) 0)) r5 (LLVM.P (LLVM.A (LLVM.SSize g) 0)) r7
+        (ArrayT t'' e'') -> emit $ LLVM.Store (LLVM.P (LLVM.A (LLVM.SSize g'') 0)) r5 (LLVM.P (LLVM.A (LLVM.SSize g'') 0)) r7
         _ -> emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t2) 0)) r5 (LLVM.P (LLVM.A (typeToItype t2) 0)) r7
          
-    
     return r1
 
 {-arrayDecHelper :: Type -> LLVM.Val -> String -> CodeGen LLVM.Val
@@ -755,7 +766,15 @@ typeToArrT :: Type -> LLVM.Size
 typeToArrT Int = LLVM.SSize "%arrInt0"
 typeToArrT Doub = LLVM.SSize "%arrDoub0"
 typeToArrT Bool = LLVM.SSize "%arrBool0"
-typeToArrT (ArrayT t1 e) = LLVM.SSize (((\(LLVM.SSize x) -> takeWhile (not.isDigit) x) (typeToArrT t1)) ++(show ( sum (zipWith (*) ( reverse ( map digitToInt ((\(LLVM.SSize x) -> filter isDigit x) (typeToArrT t1)))) [1,10..])))) 
+typeToArrT (ArrayT t1 e) = tTATh t1 ((arrayFindDepth t1) +1)
+
+tTATh :: Type -> Int -> LLVM.Size 
+tTATh t1 i = LLVM.SSize (((\(LLVM.SSize x) -> takeWhile (not.isDigit) x) (typeToArrT t1)) ++(show $ i - ( sum (zipWith (*) ( reverse ( map digitToInt ((\(LLVM.SSize x) -> filter isDigit x) (typeToArrT t1)))) [1,10..])))) 
+
+
+arrayFindDepth :: Type -> Int
+arrayFindDepth (ArrayT t1 e) = (arrayFindDepth t1) + 1 
+arrayFindDepth _ = 0
 
 argTy :: Type -> LLVM.Size
 argTy (ArrayT t _) = typeToArrT t
