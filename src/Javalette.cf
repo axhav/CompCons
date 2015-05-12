@@ -52,21 +52,26 @@ SExp.      Stmt ::= Expr  ";" ;
 
 -- Types ---------------------------------------------------
 
-Int.       Type ::= "int" ;
+Int.       Type1 ::= "int" ;
 
-Doub.      Type ::= "double" ;
+Doub.      Type1 ::= "double" ;
 
-Bool.      Type ::= "boolean" ;
+Bool.      Type1 ::= "boolean" ;
 
-Void.      Type ::= "void" ;
+Void.      Type1 ::= "void" ;
 
-ArrayT.    Type ::= Type "[" [Expr] "]";
+ArrayT.    Type ::= Type1 Bracket ;
 
 internal   Fun. Type ::= Type "(" [Type] ")" ;
 
 internal   ETyped. Expr ::= "[" Expr ":" Type "]" ;
 
 separator  Type "," ;
+
+coercions Type 1; 
+Brackets. Bracket ::=  Bracket "[" [Expr] "]"  ;
+NoBracket. Bracket ::= "[" "]";
+
 
 -- Expressions ---------------------------------------------
 
@@ -86,7 +91,7 @@ EString.   Expr6 ::= String ;
 
 EIndex.    Expr6 ::= Expr6 "[" Expr2 "]" ;
 
-EDot.      Expr6 ::= Expr6 "." Expr6 ;
+EDot.      Expr5 ::= Expr6 "." Expr6 ;
 
 Neg.       Expr5 ::= "-" Expr6 ;
 
