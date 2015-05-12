@@ -155,12 +155,12 @@ Expr6 : Ident { EVar $1 }
   | Ident '(' ListExpr ')' { EApp $1 $3 }
   | String { EString $1 }
   | Expr6 '[' Expr2 ']' { EIndex $1 $3 }
-  | Expr6 '.' Expr6 { EDot $1 $3 }
   | '(' Expr ')' { $2 }
 
 
 Expr5 :: { Expr }
-Expr5 : '-' Expr6 { Neg $2 } 
+Expr5 : Expr6 '.' Expr6 { EDot $1 $3 } 
+  | '-' Expr6 { Neg $2 }
   | '!' Expr6 { Not $2 }
   | Expr6 { $1 }
 

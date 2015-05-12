@@ -1,6 +1,6 @@
 int main() {
 
-  int[][] a = new int[10][4];
+  int[][][] a = new int[2][3][4];
 
   //int j;
   //a[4] = 4;

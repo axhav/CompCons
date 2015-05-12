@@ -164,7 +164,7 @@ instance Print Expr where
    EApp id exprs -> prPrec i 6 (concatD [prt 0 id , doc (showString "(") , prt 0 exprs , doc (showString ")")])
    EString str -> prPrec i 6 (concatD [prt 0 str])
    EIndex expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , doc (showString "[") , prt 2 expr , doc (showString "]")])
-   EDot expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , doc (showString ".") , prt 6 expr])
+   EDot expr0 expr -> prPrec i 5 (concatD [prt 6 expr0 , doc (showString ".") , prt 6 expr])
    Neg expr -> prPrec i 5 (concatD [doc (showString "-") , prt 6 expr])
    Not expr -> prPrec i 5 (concatD [doc (showString "!") , prt 6 expr])
    EMul expr0 mulop expr -> prPrec i 4 (concatD [prt 4 expr0 , prt 0 mulop , prt 5 expr])
