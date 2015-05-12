@@ -50,7 +50,7 @@ data Type =
  | Doub
  | Bool
  | Void
- | ArrayT Type [Expr]
+ | ArrayT Type Bracket
  | Fun Type [Type]
   deriving (Eq,Ord,Show,Read)
 
@@ -73,6 +73,11 @@ data Expr =
  | EAnd Expr Expr
  | EOr Expr Expr
  | EArr Type
+  deriving (Eq,Ord,Show,Read)
+
+data Bracket =
+   Brackets [Expr] Bracket
+ | NoBracket [Expr]
   deriving (Eq,Ord,Show,Read)
 
 data AddOp =

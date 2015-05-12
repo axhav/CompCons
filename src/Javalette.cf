@@ -69,8 +69,8 @@ internal   ETyped. Expr ::= "[" Expr ":" Type "]" ;
 separator  Type "," ;
 
 coercions Type 1; 
-Brackets. Bracket ::=  Bracket "[" [Expr] "]"  ;
-NoBracket. Bracket ::= "[" "]";
+Brackets. Bracket ::= "[" [Expr] "]" Bracket ;
+NoBracket. Bracket ::= "[" [Expr] "]";
 
 
 -- Expressions ---------------------------------------------

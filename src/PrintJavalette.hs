@@ -141,11 +141,11 @@ instance Print Item where
 
 instance Print Type where
   prt i e = case e of
-   Int  -> prPrec i 0 (concatD [doc (showString "int")])
-   Doub  -> prPrec i 0 (concatD [doc (showString "double")])
-   Bool  -> prPrec i 0 (concatD [doc (showString "boolean")])
-   Void  -> prPrec i 0 (concatD [doc (showString "void")])
-   ArrayT type' exprs -> prPrec i 0 (concatD [prt 0 type' , doc (showString "[") , prt 0 exprs , doc (showString "]")])
+   Int  -> prPrec i 1 (concatD [doc (showString "int")])
+   Doub  -> prPrec i 1 (concatD [doc (showString "double")])
+   Bool  -> prPrec i 1 (concatD [doc (showString "boolean")])
+   Void  -> prPrec i 1 (concatD [doc (showString "void")])
+   ArrayT type' bracket -> prPrec i 0 (concatD [prt 1 type' , prt 0 bracket])
    Fun type' types -> prPrec i 0 (concatD [prt 0 type' , doc (showString "(") , prt 0 types , doc (showString ")")])
 
   prtList es = case es of
@@ -178,6 +178,12 @@ instance Print Expr where
    [] -> (concatD [])
    [x] -> (concatD [prt 0 x])
    x:xs -> (concatD [prt 0 x , doc (showString ",") , prt 0 xs])
+
+instance Print Bracket where
+  prt i e = case e of
+   Brackets exprs bracket -> prPrec i 0 (concatD [doc (showString "[") , prt 0 exprs , doc (showString "]") , prt 0 bracket])
+   NoBracket exprs -> prPrec i 0 (concatD [doc (showString "[") , prt 0 exprs , doc (showString "]")])
+
 
 instance Print AddOp where
   prt i e = case e of

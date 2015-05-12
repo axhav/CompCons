@@ -126,12 +126,17 @@ ListItem : Item { (:[]) $1 }
   | Item ',' ListItem { (:) $1 $3 }
 
 
-Type :: { Type }
-Type : 'int' { Int } 
+Type1 :: { Type }
+Type1 : 'int' { Int } 
   | 'double' { Doub }
   | 'boolean' { Bool }
   | 'void' { Void }
-  | Type '[' ListExpr ']' { ArrayT $1 $3 }
+  | '(' Type ')' { $2 }
+
+
+Type :: { Type }
+Type : Type1 Bracket { ArrayT $1 $2 } 
+  | Type1 { $1 }
 
 
 Expr :: { Expr }
@@ -144,6 +149,11 @@ ListType :: { [Type] }
 ListType : {- empty -} { [] } 
   | Type { (:[]) $1 }
   | Type ',' ListType { (:) $1 $3 }
+
+
+Bracket :: { Bracket }
+Bracket : '[' ListExpr ']' Bracket { Brackets $2 $4 } 
+  | '[' ListExpr ']' { NoBracket $2 }
 
 
 Expr6 :: { Expr }

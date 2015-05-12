@@ -73,12 +73,13 @@ checkStm s = case s of
         b' <- checkBlock b
         exitBlock
         return (BStmt b')  
-    (Decl t items) -> do
-        retItems <- loopHelper t items
-        case t of
-            (ArrayT t' []) -> return (Decl t retItems)
-            (ArrayT t' _)  -> fail $ "Expected empty brackets in array declaration" 
-            _              -> return (Decl t retItems)
+    (Decl t items) -> case t of
+        ArrayT t' b ->  do
+            retItems <- loopHelper t' items
+            return (Decl t retItems)
+        _              -> do
+            retItems <- loopHelper t items
+            return (Decl t retItems)
     (Ass e1 e2) -> do
         case e1 of
             (EVar id) -> do
@@ -265,49 +266,31 @@ inferExp e = case e of
     (EOr e1 e2)     -> do
         (e1',e2',t) <- binaryNum' e1 e2 [Bool]
         return (ETyped  (EOr e1' e2') t)
-    (EArr t@(ArrayT t' _)) -> do
-        --fail $ printTree t
-        --er <- asd t Void
-        --fail $ printTree er
-        expr <- inferType t
-        return (ETyped (EArr expr) (findArrType t))
-
-asd :: Type -> Type -> EnvM Type 
-asd t1@(ArrayT t1' e1') t2 = case t2 of
-    Void -> do
-        ret <- asd t1' t1 
-        return (ArrayT ret e1') 
-    ArrayT t' e' -> do
-        ret@(ArrayT t e) <- asd t1' t1
-        return (ArrayT ret e1')
-    _ -> do
-        return t1
-asd t1 t2 = case t2 of
-    _ -> do
-        return t1        
-    
-        
+    (EArr t@(ArrayT t' b)) -> do
+        expr <- inferBracket b
+        return (ETyped (EArr (ArrayT t' expr)) t' )
 
 -- Infer a certain type.
-inferType :: Type -> EnvM Type
-inferType t = case t of
-    (ArrayT t1@(ArrayT t1' e') e) -> do
-        expr <- mapM inferExp e
-        rt <- inferType t1
-        mapM (\(ETyped _ t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
-        return (ArrayT rt expr)       
-    (ArrayT t' e) -> do
-        expr <- mapM inferExp e
-        mapM (\(ETyped _ t'') -> do; unless (t'' == Int) $ fail $ "Expected type int but found type " ++ printTree t'') expr
-        return (ArrayT t' expr)
-    _             -> fail $ "Expected array decleration but found " ++ printTree t
+inferBracket :: Bracket -> EnvM Bracket
+inferBracket b1 = case b1 of
+    (Brackets e b) -> do
+        expr@[(ETyped e t)] <- mapM inferExp e
+        unless (t == Int) $ fail $ "Expected type int but found type " ++ printTree t
+        b' <- inferBracket b
+        return (Brackets expr b')
+    (NoBracket e) -> do
+        expr@[(ETyped e t)] <- mapM inferExp e
+        unless (t == Int) $ fail $ "Expected type int but found type " ++ printTree t
+        return (NoBracket expr)
+      
+        
 
 -- Help function to find the type of an array.    
 findArrType:: Type -> Type
 findArrType Int = Int 
 findArrType Doub = Doub
 findArrType Bool = Bool
-findArrType (ArrayT t _) = ArrayT (findArrType t) []
+findArrType (ArrayT t b) = findArrType t
 
 -- Used to compare the type of numerical expression and makes it 
 -- return the type of the inputted ones

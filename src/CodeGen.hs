@@ -620,10 +620,10 @@ test t t2 i g = case t of
         emit $ LLVM.CondB r4 l2 l3  
         emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition -}
 
-        ((LLVM.VInt e'):is) <- mapM compileExp e2
+        --((LLVM.VInt e'):is) <- mapM compileExp e2
         --fail $ show e'
-        listRet1 <- emitNumberArray t t2 i g e' --test t' t2 (i+1) g
-        mapM (\x -> (storeArrayNumberInArray t x listRet1 (e'-1) g i)) listRet2
+        --listRet1 <- emitNumberArray t t2 i g (e'-1) --test t' t2 (i+1) g
+        --mapM (\x -> (storeArrayNumberInArray t x listRet1 (e'-1) g i)) listRet2
         -- Store emit arrays into array above
         {-emit $ LLVM.Ass r7 (LLVM.GetElmPtr (typeToArrT t) ret1 0 (LLVM.VInt 1))
         emit $ LLVM.Ass r8 (LLVM.Load  (LLVM.P (LLVM.A (LLVM.SSize g') 0)) r7)
@@ -634,12 +634,12 @@ test t t2 i g = case t of
         emit $ LLVM.Store LLVM.Word r6 LLVM.Word r3   
         emit $ LLVM.Goto l1
         emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while-}
-        return listRet1        
+        return listRet2   
     ArrayT t' e -> do
         ret <- emitArray t t2 i g
         return [ret]
 
-storeArrayNumberInArray :: Type -> LLVM.Val -> [LLVM.Val] -> Integer -> String -> Int -> CodeGen ()
+{-storeArrayNumberInArray :: Type -> LLVM.Val -> [LLVM.Val] -> Integer -> String -> Int -> CodeGen ()
 storeArrayNumberInArray t v1 (v:vs) 0 s i2 = do
     storeArrayInArray t v1 v 0 s i2
     return ()
@@ -668,10 +668,10 @@ storeArrayInArray t r1 r2 i g i2 = do
     emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.SSize g0) r1 0 (LLVM.VInt 1))
     emit $ LLVM.Ass r4 (LLVM.Load  (LLVM.P (LLVM.A (LLVM.SSize g') 0)) r3)
     emit $ LLVM.Ass r5 (LLVM.GetElmPtr (LLVM.P (LLVM.A (LLVM.SSize g') 0)) r4 0 (LLVM.VInt i))
-    emit $ LLVM.Store (LLVM.SSize g') r2 (LLVM.SSize g') r5  
+    emit $ LLVM.Store (LLVM.SSize g') r2 (LLVM.SSize g') r5  -}
   
 emitArray :: Type -> Type -> Int -> String -> CodeGen LLVM.Val
-emitArray t1@(ArrayT t e) t2 i g = do
+emitArray t1@(ArrayT t b@(Brackets e b')) t2 i g = do
     let typeName = takeWhile (\x -> not (isNumber x) ) g
     --let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') g)))) [1,10..]]
     let g' = typeName ++ show (i)
@@ -701,43 +701,7 @@ emitArray t1@(ArrayT t e) t2 i g = do
         False -> emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t2) 0)) r5 (LLVM.P (LLVM.A (typeToItype t2) 0)) r7
     blank     
     return r1
-
-{-arrayDecHelper :: Type -> LLVM.Val -> String -> CodeGen LLVM.Val
-arrayDecHelper (ArrayT t@(ArrayT t1 e1) e2) rHSize g = do
-    arrayDecHelper t rHSize g
-    (LLVM.VInt i:is) <- mapM compileExp e1
-    r <- helper i g rHSize e2 t1
-    return r
-        
-arrayDecHelper t@(ArrayT t1 e1) rHSize g = do
-    r <- helper 0 g rHSize e1 t1
-    return r
-     
-helper :: Integer -> String -> LLVM.Val -> [Expr] -> Type -> CodeGen LLVM.Val
-helper i g rHSize e t = do
-    r1 <- getNextTempReg
-    r2 <- getNextTempReg
-    r5 <- getNextTempReg
-    r6 <- getNextTempReg
-    r7 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
-    (e':is) <- mapM compileExp e --TODO fix for dynamic array
-    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t)) ++ " " ++ show rHSize ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
-    emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
-    emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
-    
-    --Stores size of array to struct
-    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 0))
-    emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
-
-    --Stores calloc pointer to struct
-    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
-    emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
-    case i of
-        0 -> return r1
-        _ -> helper (i-1) (gx ++ show (gi -1)) rHSize e t-}
-    
-    
+  
 
 -- Returns the size of type inside a register.
 getHardwareSizeOfType :: Type -> CodeGen LLVM.Val

@@ -63,7 +63,7 @@ transType x = case x of
   Doub  -> failure x
   Bool  -> failure x
   Void  -> failure x
-  ArrayT type' exprs  -> failure x
+  ArrayT type' bracket  -> failure x
   Fun type' types  -> failure x
 
 
@@ -87,6 +87,12 @@ transExpr x = case x of
   EAnd expr1 expr2  -> failure x
   EOr expr1 expr2  -> failure x
   EArr type'  -> failure x
+
+
+transBracket :: Bracket -> Result
+transBracket x = case x of
+  Brackets exprs bracket  -> failure x
+  NoBracket exprs  -> failure x
 
 
 transAddOp :: AddOp -> Result
