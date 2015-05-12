@@ -133,27 +133,12 @@ setNextGlobalVar s = do
     return gName
 
 -- Insert new global variable into globalList and return the variable name. TODO
-setNextGlobalArr :: Type -> CodeGen String
-setNextGlobalArr (ArrayT t _) = do
+setNextGlobalArr :: Bracket -> CodeGen String
+setNextGlobalArr b = do
     gl <- gets globalList
-    case t of
-        Int  -> do
-            let gName = "%arrInt0" 
-            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
-                modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
-            return gName 
-        Doub -> do
-            let gName = "%arrDoub0"
-            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $  
-                modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
-            return gName
-        Bool -> do
-            let gName = "%arrBool0"
-            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
-                modify $ updateGlobalList ((LLVM.GStruct (typeToItype t) gName):)
-            return gName
-        ArrayT t1 e1 -> do
-            setNextGlobalArr t
+    case b of
+        (Brackets e b') -> do
+            setNextGlobalArr b'
             ((LLVM.GStruct _ gl1):gls) <- gets globalList
             let typeName = takeWhile (\x -> not (isNumber x) ) gl1
             let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
@@ -161,6 +146,32 @@ setNextGlobalArr (ArrayT t _) = do
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $
                 modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
             return gName 
+        (NoBracket (e@(ETyped e' t):es)) -> do
+            case t of
+                Int  -> do
+                    let gName = "%arrInt0" 
+                    unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
+                        modify $ updateGlobalList ((LLVM.GStruct (typeToItype Int) gName):)
+                    return gName 
+                Doub -> do
+                    let gName = "%arrDoub0"
+                    unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $  
+                        modify $ updateGlobalList ((LLVM.GStruct (typeToItype Doub) gName):)
+                    return gName
+                Bool -> do
+                    let gName = "%arrBool0"
+                    unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
+                        modify $ updateGlobalList ((LLVM.GStruct (typeToItype Bool) gName):)
+                    return gName
+        {-ArrayT t1 e1 -> do
+            setNextGlobalArr b'
+            ((LLVM.GStruct _ gl1):gls) <- gets globalList
+            let typeName = takeWhile (\x -> not (isNumber x) ) gl1
+            let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
+            let gName = "%arrInt" ++ show (index+1)
+            unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $
+                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
+            return gName _-}
             {--setNextGlobalArr 
             (gl') <- gets globalList
             case gl' of
@@ -554,11 +565,11 @@ compileExp (ETyped (EOr e1 e2) t) = do
     r3 <- getNextTempReg
     emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
-compileExp (ETyped (EArr t1@(ArrayT t e)) t2) = do
-    g <- setNextGlobalArr t2
+compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
+    g <- setNextGlobalArr b
     --let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') g)))) [1,10..]]
-    (r1:rs) <- test t1 t2 0 g
-
+    --(r1:rs) <- test t1 t2 0 g
+    r1 <- getNextTempReg
 {-
     g <- setNextGlobalArr t2
     r1 <- getNextTempReg
