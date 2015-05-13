@@ -292,6 +292,11 @@ compileStm s = do
                     emit $ LLVM.Store (argTy t) e' (argTy t) r
                 (ETyped (EIndex (ETyped (EVar id) _) b) t') -> do
                     r <- getVarReg id
+                    r1 <- compileBracket b r t'
+                    e4' <- compileExp expr
+                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r1 
+                    blank
+                    {-r <- getVarReg id
                     r1 <- getNextTempReg
                     r2 <- getNextTempReg
                     r3 <- getNextTempReg
@@ -300,7 +305,7 @@ compileStm s = do
                     i <- compileBracket b
                     emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t') 0)) r2 0 i) 
                     e4' <- compileExp expr 
-                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r3    
+                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r3   -} 
                 _ -> do
                     fail $ printTree s
         (Incr id) -> do
@@ -438,19 +443,13 @@ compileExp (ETyped (EString s) t) = do
     let l = (length s) + 1
     emit $ LLVM.Ass r2 (LLVM.TwoArray l r1 0 0)
     return r2
-compileExp (ETyped (EIndex e1 b) t) = case e1 of
-    (ETyped (EVar id) _ ) -> do
-        r <- getVarReg id
-        r1 <- getNextTempReg
-        r2 <- getNextTempReg
-        r3 <- getNextTempReg
-        r4 <- getNextTempReg
-        emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1))  
-        emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
-        b' <- compileBracket b
-        emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 b') 
-        emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
-        return r4
+compileExp (ETyped (EIndex e1@(ETyped (EVar id) _) b) t) = do
+    r <- getVarReg id
+    r1 <- compileBracket b r t
+    r2 <- getNextTempReg
+    emit $ LLVM.Ass r2 (LLVM.Load (typeToItype t) r1)
+    blank
+    return r2
 compileExp (ETyped (EDot e1@(ETyped (EVar id) _) e2) t) = do 
     r <- getVarReg id
     r1 <- getNextTempReg
@@ -584,8 +583,32 @@ compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
 -}
     return r1 
 
-compileBracket :: Bracket -> CodeGen LLVM.Val
-compileBracket b =  return $ LLVM.VInt 1
+compileBracket :: Bracket -> LLVM.Val -> Type -> CodeGen LLVM.Val
+compileBracket b r t = do
+        let bType = bracketToArrT b
+        let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
+        let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
+        let bType' = LLVM.SSize (typeName ++ show (j-1))
+        r1 <- getNextTempReg
+        r2 <- getNextTempReg
+        r3 <- getNextTempReg
+        r4 <- getNextTempReg
+        
+        emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 1))
+        case b of 
+            (NoBracket e) -> do
+                (e':is) <- mapM compileExp e  
+                emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
+                emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e') 
+                --emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
+                return r3
+            (Brackets e b') -> do
+                (e':is) <- mapM compileExp e
+                emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A bType' 0)) r1)
+                emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A bType' 0)) r2 0 e') 
+                emit $ LLVM.Ass r4 (LLVM.Load bType' r3)
+                ret <- compileBracket b' r4 t
+                return ret 
 
 -- * Helps functions for the code generator.
 --(Brackets e b')
