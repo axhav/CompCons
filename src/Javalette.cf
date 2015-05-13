@@ -89,7 +89,7 @@ EApp.      Expr6 ::= Ident "(" [Expr] ")" ;
 
 EString.   Expr6 ::= String ;
 
-EIndex.    Expr6 ::= Expr6 "[" Expr2 "]" ;
+EIndex.    Expr6 ::= Expr6 Bracket ;
 
 EDot.      Expr5 ::= Expr6 "." Expr6 ;
 

@@ -234,13 +234,15 @@ inferExp e = case e of
                 ts' <- (zipWithM checkExp exprs ts)
                 return (ETyped (EApp id ts') t) 
     (EString str)   -> return (ETyped (EString str) Void)
-    (EIndex e1 e2)  -> do
-        e2'@(ETyped _ t) <- inferExp e2
-        unless (t == Int) $ fail $ 
-            "Expected type int but found type " ++ printTree t
-        e1'@(ETyped _ (ArrayT t1 _)) <- inferExp e1
-        return (ETyped (EIndex e1' e2') t1)
-    (EDot e1 e2@(EVar (Ident s)))    -> do
+    (EIndex e b) -> do
+        --fail $ printTree e
+        --e2'@(ETyped _ t) <- inferExp e2
+        --unless (t == Int) $ fail $ 
+          --  "Expected type int but found type " ++ printTree t
+        b' <- inferBracket b  
+        e'@(ETyped _ t1) <- inferExp e
+        return (ETyped (EIndex e' b') t1)
+    (EDot e1 e2@(EVar (Ident s))) -> do
         unless (s == "length") $ fail $ --TODO add general
             "Expected length after do but found " ++ printTree e2
         e1' <- inferExp e1
@@ -270,7 +272,7 @@ inferExp e = case e of
         expr <- inferBracket b
         return (ETyped (EArr (ArrayT t' expr)) t' )
 
--- Infer a certain type.
+-- Infer a certain bracket.
 inferBracket :: Bracket -> EnvM Bracket
 inferBracket b1 = case b1 of
     (Brackets e b) -> do

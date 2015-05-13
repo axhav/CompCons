@@ -290,15 +290,14 @@ compileStm s = do
                     r <- getVarReg id
                     e' <- compileExp expr
                     emit $ LLVM.Store (argTy t) e' (argTy t) r
-                (ETyped (EIndex (ETyped (EVar id) _) e4) t') -> do
-                    --(r, _) <- lookupVar id
+                (ETyped (EIndex (ETyped (EVar id) _) b) t') -> do
                     r <- getVarReg id
                     r1 <- getNextTempReg
                     r2 <- getNextTempReg
                     r3 <- getNextTempReg
                     emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1))  
                     emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t') 0)) r1)
-                    i <- compileExp e4
+                    i <- compileBracket b
                     emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t') 0)) r2 0 i) 
                     e4' <- compileExp expr 
                     emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r3    
@@ -439,7 +438,7 @@ compileExp (ETyped (EString s) t) = do
     let l = (length s) + 1
     emit $ LLVM.Ass r2 (LLVM.TwoArray l r1 0 0)
     return r2
-compileExp (ETyped (EIndex e1 e2) t) = case e1 of
+compileExp (ETyped (EIndex e1 b) t) = case e1 of
     (ETyped (EVar id) _ ) -> do
         r <- getVarReg id
         r1 <- getNextTempReg
@@ -448,8 +447,8 @@ compileExp (ETyped (EIndex e1 e2) t) = case e1 of
         r4 <- getNextTempReg
         emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1))  
         emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
-        e2' <- compileExp e2
-        emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e2') 
+        b' <- compileBracket b
+        emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 b') 
         emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
         return r4
 compileExp (ETyped (EDot e1@(ETyped (EVar id) _) e2) t) = do 
@@ -584,6 +583,9 @@ compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
     emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
 -}
     return r1 
+
+compileBracket :: Bracket -> CodeGen LLVM.Val
+compileBracket b =  return $ LLVM.VInt 1
 
 -- * Helps functions for the code generator.
 --(Brackets e b')

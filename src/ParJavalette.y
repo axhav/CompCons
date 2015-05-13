@@ -14,51 +14,52 @@ import ErrM
 %monad { Err } { thenM } { returnM }
 %tokentype { Token }
 
-%token
-  '!' { PT _ (TS _ 1) }
-  '!=' { PT _ (TS _ 2) }
-  '%' { PT _ (TS _ 3) }
-  '&&' { PT _ (TS _ 4) }
-  '(' { PT _ (TS _ 5) }
-  ')' { PT _ (TS _ 6) }
-  '*' { PT _ (TS _ 7) }
-  '+' { PT _ (TS _ 8) }
-  '++' { PT _ (TS _ 9) }
-  ',' { PT _ (TS _ 10) }
-  '-' { PT _ (TS _ 11) }
-  '--' { PT _ (TS _ 12) }
-  '.' { PT _ (TS _ 13) }
-  '/' { PT _ (TS _ 14) }
-  ':' { PT _ (TS _ 15) }
-  ';' { PT _ (TS _ 16) }
-  '<' { PT _ (TS _ 17) }
-  '<=' { PT _ (TS _ 18) }
-  '=' { PT _ (TS _ 19) }
-  '==' { PT _ (TS _ 20) }
-  '>' { PT _ (TS _ 21) }
-  '>=' { PT _ (TS _ 22) }
-  '[' { PT _ (TS _ 23) }
-  ']' { PT _ (TS _ 24) }
-  'boolean' { PT _ (TS _ 25) }
-  'double' { PT _ (TS _ 26) }
-  'else' { PT _ (TS _ 27) }
-  'false' { PT _ (TS _ 28) }
-  'for' { PT _ (TS _ 29) }
-  'if' { PT _ (TS _ 30) }
-  'int' { PT _ (TS _ 31) }
-  'new' { PT _ (TS _ 32) }
-  'return' { PT _ (TS _ 33) }
-  'true' { PT _ (TS _ 34) }
-  'void' { PT _ (TS _ 35) }
-  'while' { PT _ (TS _ 36) }
-  '{' { PT _ (TS _ 37) }
-  '||' { PT _ (TS _ 38) }
-  '}' { PT _ (TS _ 39) }
+%token 
+ '!' { PT _ (TS _ 1) }
+ '!=' { PT _ (TS _ 2) }
+ '%' { PT _ (TS _ 3) }
+ '&&' { PT _ (TS _ 4) }
+ '(' { PT _ (TS _ 5) }
+ ')' { PT _ (TS _ 6) }
+ '*' { PT _ (TS _ 7) }
+ '+' { PT _ (TS _ 8) }
+ '++' { PT _ (TS _ 9) }
+ ',' { PT _ (TS _ 10) }
+ '-' { PT _ (TS _ 11) }
+ '--' { PT _ (TS _ 12) }
+ '.' { PT _ (TS _ 13) }
+ '/' { PT _ (TS _ 14) }
+ ':' { PT _ (TS _ 15) }
+ ';' { PT _ (TS _ 16) }
+ '<' { PT _ (TS _ 17) }
+ '<=' { PT _ (TS _ 18) }
+ '=' { PT _ (TS _ 19) }
+ '==' { PT _ (TS _ 20) }
+ '>' { PT _ (TS _ 21) }
+ '>=' { PT _ (TS _ 22) }
+ '[' { PT _ (TS _ 23) }
+ ']' { PT _ (TS _ 24) }
+ 'boolean' { PT _ (TS _ 25) }
+ 'double' { PT _ (TS _ 26) }
+ 'else' { PT _ (TS _ 27) }
+ 'false' { PT _ (TS _ 28) }
+ 'for' { PT _ (TS _ 29) }
+ 'if' { PT _ (TS _ 30) }
+ 'int' { PT _ (TS _ 31) }
+ 'new' { PT _ (TS _ 32) }
+ 'return' { PT _ (TS _ 33) }
+ 'true' { PT _ (TS _ 34) }
+ 'void' { PT _ (TS _ 35) }
+ 'while' { PT _ (TS _ 36) }
+ '{' { PT _ (TS _ 37) }
+ '||' { PT _ (TS _ 38) }
+ '}' { PT _ (TS _ 39) }
 
 L_ident  { PT _ (TV $$) }
 L_integ  { PT _ (TI $$) }
 L_doubl  { PT _ (TD $$) }
 L_quoted { PT _ (TL $$) }
+L_err    { _ }
 
 
 %%
@@ -164,7 +165,7 @@ Expr6 : Ident { EVar $1 }
   | 'false' { ELitFalse }
   | Ident '(' ListExpr ')' { EApp $1 $3 }
   | String { EString $1 }
-  | Expr6 '[' Expr2 ']' { EIndex $1 $3 }
+  | Expr6 Bracket { EIndex $1 $2 }
   | '(' Expr ')' { $2 }
 
 

@@ -77,7 +77,7 @@ transExpr x = case x of
   ELitFalse  -> failure x
   EApp id exprs  -> failure x
   EString str  -> failure x
-  EIndex expr1 expr2  -> failure x
+  EIndex expr bracket  -> failure x
   EDot expr1 expr2  -> failure x
   Neg expr  -> failure x
   Not expr  -> failure x

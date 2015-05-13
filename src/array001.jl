@@ -1,9 +1,9 @@
 int main() {
 
-  int[][][] a = new int[2][3][4];
+  int[][] a = new int[2][3];
 
   //int j;
-  //a[4] = 4;
+  a[0][1] = 4;
   
   //for (int x : a) printInt(x);
   //printInt(a.length);

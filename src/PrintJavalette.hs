@@ -163,7 +163,7 @@ instance Print Expr where
    ELitFalse  -> prPrec i 6 (concatD [doc (showString "false")])
    EApp id exprs -> prPrec i 6 (concatD [prt 0 id , doc (showString "(") , prt 0 exprs , doc (showString ")")])
    EString str -> prPrec i 6 (concatD [prt 0 str])
-   EIndex expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , doc (showString "[") , prt 2 expr , doc (showString "]")])
+   EIndex expr bracket -> prPrec i 6 (concatD [prt 6 expr , prt 0 bracket])
    EDot expr0 expr -> prPrec i 5 (concatD [prt 6 expr0 , doc (showString ".") , prt 6 expr])
    Neg expr -> prPrec i 5 (concatD [doc (showString "-") , prt 6 expr])
    Not expr -> prPrec i 5 (concatD [doc (showString "!") , prt 6 expr])
