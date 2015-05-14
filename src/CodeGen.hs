@@ -281,9 +281,14 @@ compileStm s = do
                     (_,ArrayT t' b') <- lookupVar id
                     r <- getVarReg id
                     r1 <- compileBracket b' r t b
---                    r1 <- compileBracket b r t' b
                     e4' <- compileExp expr
-                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r1 
+--                    r1 <- compileBracket b r t' b
+                    case cmpBracketLenght b' b of
+                        True -> emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r1 
+                        _    -> do
+                            let arrT = typeToArrT t
+                            let arrS = show $ arrayFindDepth b' - arrayFindDepth b - 1
+                            emit $ LLVM.Store (LLVM.SSize (arrT ++ arrS)) e4' (LLVM.SSize (arrT ++ arrS)) r1 
                 _ -> do
                     fail $ printTree s
         (Incr id) -> do
@@ -441,7 +446,10 @@ compileExp (ETyped (EIndex e1@(ETyped (EVar id) _) b) t) = do
     r2 <- getNextTempReg
     case cmpBracketLenght b' b of
         True -> emit $ LLVM.Ass r2 (LLVM.Load (typeToItype t) r1)
-        _           -> emit $ LLVM.Ass r2 (LLVM.Load (bracketToArrT b t) r1)
+        _    -> do
+            let arrT = typeToArrT t
+            let arrS = show $ arrayFindDepth b' - arrayFindDepth b - 1
+            emit $ LLVM.Ass r2 (LLVM.Load (LLVM.SSize (arrT ++ arrS)) r1)
     return r2
 compileExp (ETyped (EDot e1 e2) t) = do 
     r <- compileExp e1
@@ -755,6 +763,7 @@ typeToArrT :: Type -> String
 typeToArrT Int = "%arrInt"
 typeToArrT Doub = "%arrDoub"
 typeToArrT Bool = "%arrBool"
+typeToArrT (ArrayT t b) = typeToArrT t
 
 
 getExpFromBracket :: Bracket -> Expr
@@ -784,6 +793,7 @@ bracketToArrT b t = case t of
 arrayFindDepth :: Bracket -> Int
 arrayFindDepth (Brackets e b) = (arrayFindDepth b) + 1 
 arrayFindDepth (NoBracket e) = 0
+
 
 argTy :: Type -> LLVM.Size
 argTy (ArrayT t _) = LLVM.SSize ( typeToArrT t ++ show 0)
