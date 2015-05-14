@@ -339,7 +339,7 @@ compileStm s = do
             compileStm stm
             emit $ LLVM.Goto l1
             emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while
-        (ForEach t id e stm) -> do
+        (ForEach t id e@(ETyped e' (ArrayT t1' b)) stm) -> do
             extendContext id t
             l1 <- getNextLabel
             l2 <- getNextLabel
@@ -356,31 +356,38 @@ compileStm s = do
             r10 <- getNextTempReg
             r11 <- getNextTempReg
             r <- compileExp e
-
-            bType <- case e of 
-                (ETyped (EArr (ArrayT t1' b)) t') -> return $ bracketToArrT b t'
-                (ETyped e t')                    -> return $ bracketToArrT (NoBracket []) t'
+            --fail $ printTree e 
+            let bType = bracketToArrT b t1'
             let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
             let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
-            let bType' = LLVM.SSize (typeName ++ show (j-1))
+            bType' <- case j of
+                0 -> return $ typeToItype t
+                _ -> return $ LLVM.SSize (typeName ++ show (j-1))
+             
             
             -- Init of variable for forEach loop           
             emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 0)) -- arraySize
             emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
-            emit $ LLVM.Ass r3 (LLVM.Alloca (typeToItype t))
+            case bType' of 
+                LLVM.SSize _->  blank
+                _ -> emit $ LLVM.Ass r3 (LLVM.Alloca bType')
+            
             emit $ LLVM.Ass r4 (LLVM.Alloca LLVM.Word)
-            emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r4   
+            emit $ LLVM.Store LLVM.Word (LLVM.VInt 0) LLVM.Word r4   
             emit $ LLVM.Goto l1
             emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
-            emit $ LLVM.Ass r6 (LLVM.Load (typeToItype t) r4)            
+            emit $ LLVM.Ass r6 (LLVM.Load LLVM.Word r4)            
             emit $ LLVM.Ass r5 (LLVM.Compare LLVM.Eq LLVM.Word r2 r6)
             emit $ LLVM.CondB r5 l3 l2  
             emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
             emit $ LLVM.Ass r7 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 1)) -- arrayPointer
             emit $ LLVM.Ass r8 (LLVM.Load (LLVM.P (LLVM.A bType' 0)) r7)
             emit $ LLVM.Ass r9 (LLVM.GetElmPtr (LLVM.P (LLVM.A bType' 0)) r8 0 r6)
-            emit $ LLVM.Ass r10 (LLVM.Load bType' r9)
-            emit $ LLVM.Store (typeToItype t) r10 (typeToItype t) r3   
+            case bType' of 
+                LLVM.SSize _->  emit $ LLVM.Ass r3 (LLVM.Load bType' r9)
+                _ -> do 
+                    emit $ LLVM.Ass r10 (LLVM.Load bType' r9)
+                    emit $ LLVM.Store bType' r10 bType' r3   
             compileStm stm
             emit $ LLVM.Ass r11 (LLVM.Add LLVM.Word r6 (LLVM.VInt 1))
             emit $ LLVM.Store LLVM.Word r11 LLVM.Word r4   
@@ -594,6 +601,7 @@ emitMultiArray b t2 = case b of
         let bType' = LLVM.SSize (typeName ++ show (j-1))
         ret <- emitArray b t2     
         blank
+        comment $ printTree b
         emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType ret 0 (LLVM.VInt 0))
         emit $ LLVM.Ass r2 (LLVM.Load LLVM.Word r1)
 
