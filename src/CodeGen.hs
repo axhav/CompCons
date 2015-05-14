@@ -133,20 +133,20 @@ setNextGlobalVar s = do
     return gName
 
 -- Insert new global variable into globalList and return the variable name. TODO
-setNextGlobalArr :: Bracket -> CodeGen String
-setNextGlobalArr b = do
+setNextGlobalArr :: Type -> Bracket -> CodeGen String
+setNextGlobalArr t b = do
     gl <- gets globalList
     case b of
         (Brackets e b') -> do
-            setNextGlobalArr b'
+            setNextGlobalArr t b'
             ((LLVM.GStruct _ gl1):gls) <- gets globalList
             let typeName = takeWhile (\x -> not (isNumber x) ) gl1
             let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
             let gName = typeName ++ show (index+1) --TODO MAYBE not works for doub and bool?
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $
-                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize (typeName++show index)) gName):)
+                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ((typeToArrT t)++show index)) gName):)
             return gName 
-        (NoBracket (e@(ETyped e' t):es)) -> do
+        (NoBracket e) -> do
             case t of
                 Int  -> do
                     let gName = "%arrInt0" 
@@ -163,19 +163,6 @@ setNextGlobalArr b = do
                     unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
                         modify $ updateGlobalList ((LLVM.GStruct (typeToItype Bool) gName):)
                     return gName
-            {--setNextGlobalArr 
-            (gl') <- gets globalList
-            case gl' of
-                (LLVM.GStruct _ gl1):gls -> do
-                    let typeName = takeWhile (\x -> not (isNumber x) ) gl1
-                    let index =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
-                    let gName = "%arrInt" ++ show (index+1) 
-                    unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $ 
-                        modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
-                    return gName 
-                _ -> do
-                    setNextGlobalArr t-}
-        _    -> fail $"asdasfsafasd" --undefined
     
  
 -- * Environment
@@ -369,9 +356,10 @@ compileStm s = do
             r10 <- getNextTempReg
             r11 <- getNextTempReg
             r <- compileExp e
+
             bType <- case e of 
-                (EArr (ArrayT t' b)) -> return $ bracketToArrT b t
-                _                    -> return $ bracketToArrT (NoBracket []) t
+                (ETyped (EArr (ArrayT t1' b)) t') -> return $ bracketToArrT b t'
+                (ETyped e t')                    -> return $ bracketToArrT (NoBracket []) t'
             let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
             let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
             let bType' = LLVM.SSize (typeName ++ show (j-1))
@@ -443,12 +431,12 @@ compileExp (ETyped (EIndex e1@(ETyped (EVar id) _) b) t) = do
     r2 <- getNextTempReg
     emit $ LLVM.Ass r2 (LLVM.Load (typeToItype t) r1)
     return r2
-compileExp (ETyped (EDot e1  e2) t) = do 
+compileExp (ETyped (EDot e1 e2) t) = do 
     r <- compileExp e1
     r1 <- getNextTempReg
     r2 <- getNextTempReg
     case e1 of
-        (EArr (ArrayT t' b)) -> emit $ LLVM.Ass r1 (LLVM.GetElmPtr (bracketToArrT b t) r 0 (LLVM.VInt 0))
+        (ETyped e (ArrayT t' b)) -> emit $ LLVM.Ass r1 (LLVM.GetElmPtr (bracketToArrT b t') r 0 (LLVM.VInt 0))
         _                    -> emit $ LLVM.Ass r1 (LLVM.GetElmPtr (bracketToArrT (NoBracket []) t) r 0 (LLVM.VInt 0))
     emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
     return r2
@@ -550,7 +538,8 @@ compileExp (ETyped (EOr e1 e2) t) = do
     emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
 compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
-    g <- setNextGlobalArr b
+    --fail $ printTree t1 ++ "    " ++ printTree t ++ "     "++ printTree t2
+    g <- setNextGlobalArr t b
     r1 <- emitMultiArray b t2
     return r1 
 compileExp a = fail $ printTree a
@@ -604,7 +593,7 @@ emitMultiArray b t2 = case b of
         let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
         let bType' = LLVM.SSize (typeName ++ show (j-1))
         ret <- emitArray b t2     
-
+        blank
         emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType ret 0 (LLVM.VInt 0))
         emit $ LLVM.Ass r2 (LLVM.Load LLVM.Word r1)
 
@@ -616,9 +605,13 @@ emitMultiArray b t2 = case b of
         emit $ LLVM.Ass r4 (LLVM.Compare LLVM.Eq LLVM.Word r2 r5)
         emit $ LLVM.CondB r4 l3 l2   
         emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
-
+		
+        blank
+		
         ret2 <- emitMultiArray b' t2
 
+        blank
+		
         -- Store emit arrays into array above
         emit $ LLVM.Ass r7 (LLVM.GetElmPtr bType ret 0 (LLVM.VInt 1))
         emit $ LLVM.Ass r8 (LLVM.Load  (LLVM.P (LLVM.A bType' 0)) r7)
@@ -738,10 +731,10 @@ typeToItype Bool = LLVM.Bit
 typeToItype Void = LLVM.Void
 typeToItype (ArrayT t _) = typeToItype t
 
-typeToArrT :: Type -> LLVM.Size
-typeToArrT Int = LLVM.SSize "%arrInt0"
-typeToArrT Doub = LLVM.SSize "%arrDoub0"
-typeToArrT Bool = LLVM.SSize "%arrBool0"
+typeToArrT :: Type -> String
+typeToArrT Int = "%arrInt"
+typeToArrT Doub = "%arrDoub"
+typeToArrT Bool = "%arrBool"
 --typeToArrT (ArrayT t b) = tTATh t ((arrayFindDepth t) +1)
 
 --tTATh :: Type -> Int -> LLVM.Size 
@@ -761,7 +754,7 @@ arrayFindDepth (Brackets e b) = (arrayFindDepth b) + 1
 arrayFindDepth (NoBracket e) = 0
 
 argTy :: Type -> LLVM.Size
-argTy (ArrayT t _) = typeToArrT t
+argTy (ArrayT t _) = LLVM.SSize ( typeToArrT t ++ show 0)
 argTy t = typeToItype t
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
