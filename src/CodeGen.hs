@@ -142,9 +142,9 @@ setNextGlobalArr b = do
             ((LLVM.GStruct _ gl1):gls) <- gets globalList
             let typeName = takeWhile (\x -> not (isNumber x) ) gl1
             let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
-            let gName = "%arrInt" ++ show (index+1) --TODO MAYBE not works for doub and bool?
+            let gName = typeName ++ show (index+1) --TODO MAYBE not works for doub and bool?
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $
-                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ("%arrInt"++show index)) gName):)
+                modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize (typeName++show index)) gName):)
             return gName 
         (NoBracket (e@(ETyped e' t):es)) -> do
             case t of
@@ -295,17 +295,6 @@ compileStm s = do
                     r1 <- compileBracket b r t'
                     e4' <- compileExp expr
                     emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r1 
-                    blank
-                    {-r <- getVarReg id
-                    r1 <- getNextTempReg
-                    r2 <- getNextTempReg
-                    r3 <- getNextTempReg
-                    emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1))  
-                    emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t') 0)) r1)
-                    i <- compileBracket b
-                    emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t') 0)) r2 0 i) 
-                    e4' <- compileExp expr 
-                    emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r3   -} 
                 _ -> do
                     fail $ printTree s
         (Incr id) -> do
@@ -363,7 +352,7 @@ compileStm s = do
             compileStm stm
             emit $ LLVM.Goto l1
             emit $ LLVM.Raw $ "L" ++ show l3 ++ ":" -- Label out of while
-        (ForEach t id e@(ETyped (EVar id1) t1) stm) -> do
+        (ForEach t id e stm) -> do
             extendContext id t
             l1 <- getNextLabel
             l2 <- getNextLabel
@@ -379,11 +368,16 @@ compileStm s = do
             r9 <- getNextTempReg
             r10 <- getNextTempReg
             r11 <- getNextTempReg
-            --(r, t2) <- lookupVar id1
-            r <- getVarReg id1
-
-            -- Init of variable for forEach loop
-            emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 0)) -- arraySize
+            r <- compileExp e
+            bType <- case e of 
+                (EArr (ArrayT t' b)) -> return $ bracketToArrT b t
+                _                    -> return $ bracketToArrT (NoBracket []) t
+            let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
+            let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
+            let bType' = LLVM.SSize (typeName ++ show (j-1))
+            
+            -- Init of variable for forEach loop           
+            emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 0)) -- arraySize
             emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
             emit $ LLVM.Ass r3 (LLVM.Alloca (typeToItype t))
             emit $ LLVM.Ass r4 (LLVM.Alloca LLVM.Word)
@@ -394,10 +388,10 @@ compileStm s = do
             emit $ LLVM.Ass r5 (LLVM.Compare LLVM.Eq LLVM.Word r2 r6)
             emit $ LLVM.CondB r5 l3 l2  
             emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
-            emit $ LLVM.Ass r7 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 1)) -- arrayPointer
-            emit $ LLVM.Ass r8 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t1) 0)) r7)
-            emit $ LLVM.Ass r9 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t1) 0)) r8 0 r6)
-            emit $ LLVM.Ass r10 (LLVM.Load (typeToItype t1) r9)
+            emit $ LLVM.Ass r7 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 1)) -- arrayPointer
+            emit $ LLVM.Ass r8 (LLVM.Load (LLVM.P (LLVM.A bType' 0)) r7)
+            emit $ LLVM.Ass r9 (LLVM.GetElmPtr (LLVM.P (LLVM.A bType' 0)) r8 0 r6)
+            emit $ LLVM.Ass r10 (LLVM.Load bType' r9)
             emit $ LLVM.Store (typeToItype t) r10 (typeToItype t) r3   
             compileStm stm
             emit $ LLVM.Ass r11 (LLVM.Add LLVM.Word r6 (LLVM.VInt 1))
@@ -448,13 +442,14 @@ compileExp (ETyped (EIndex e1@(ETyped (EVar id) _) b) t) = do
     r1 <- compileBracket b r t
     r2 <- getNextTempReg
     emit $ LLVM.Ass r2 (LLVM.Load (typeToItype t) r1)
-    blank
     return r2
-compileExp (ETyped (EDot e1@(ETyped (EVar id) _) e2) t) = do 
-    r <- getVarReg id
+compileExp (ETyped (EDot e1  e2) t) = do 
+    r <- compileExp e1
     r1 <- getNextTempReg
     r2 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.GetElmPtr (typeToArrT t) r 0 (LLVM.VInt 0))
+    case e1 of
+        (EArr (ArrayT t' b)) -> emit $ LLVM.Ass r1 (LLVM.GetElmPtr (bracketToArrT b t) r 0 (LLVM.VInt 0))
+        _                    -> emit $ LLVM.Ass r1 (LLVM.GetElmPtr (bracketToArrT (NoBracket []) t) r 0 (LLVM.VInt 0))
     emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
     return r2
 compileExp (ETyped (Neg e) t) = do
@@ -556,36 +551,14 @@ compileExp (ETyped (EOr e1 e2) t) = do
     return r3
 compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
     g <- setNextGlobalArr b
-    --let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') g)))) [1,10..]]
     r1 <- emitMultiArray b t2
-{-
-    g <- setNextGlobalArr t2
-    r1 <- getNextTempReg
-    r2 <- getNextTempReg
-    r3 <- getHardwareSizeOfType t2
-    r5 <- getNextTempReg
-    r6 <- getNextTempReg
-    r7 <- getNextTempReg
-    emit $ LLVM.Ass r1 (LLVM.Alloca (LLVM.SSize (g++"Struct")))
-    --arrayDecHelper t1 r3 g
-    (e':is) <- mapM compileExp e --TODO fix for dynamic array
-    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t2)) ++ " " ++ show r3 ++")"--(showE [t2] [r3]) ++")"-- (LLVM.showSize (typeToItype t2)) ++ " " ++ r4
-    emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
-    emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A (typeToItype t) 0)) 
-    
-    --Stores size of array to struct
-    emit $ LLVM.Ass r6 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 0))
-    emit $ LLVM.Store LLVM.Word e' LLVM.Word r6
-
-    --Stores calloc pointer to struct
-    emit $ LLVM.Ass r7 (LLVM.GetElmPtr (LLVM.SSize g) r1 0 (LLVM.VInt 1))  
-    emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t) 0)) r5 (LLVM.P (LLVM.A (typeToItype t) 0)) r7
--}
     return r1 
+compileExp a = fail $ printTree a
 
+-- Compiles and finds the address for a index in a multi-arrays.
 compileBracket :: Bracket -> LLVM.Val -> Type -> CodeGen LLVM.Val
 compileBracket b r t = do
-        let bType = bracketToArrT b
+        let bType = bracketToArrT b t
         let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
         let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
         let bType' = LLVM.SSize (typeName ++ show (j-1))
@@ -600,7 +573,6 @@ compileBracket b r t = do
                 (e':is) <- mapM compileExp e  
                 emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
                 emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e') 
-                --emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
                 return r3
             (Brackets e b') -> do
                 (e':is) <- mapM compileExp e
@@ -611,7 +583,7 @@ compileBracket b r t = do
                 return ret 
 
 -- * Helps functions for the code generator.
---(Brackets e b')
+-- A help function that declars a multi-dimension array.
 emitMultiArray :: Bracket -> Type -> CodeGen LLVM.Val
 emitMultiArray b t2 = case b of
     (Brackets (e@(ETyped e' t):es) b') -> do
@@ -627,7 +599,7 @@ emitMultiArray b t2 = case b of
         r7 <- getNextTempReg
         r8 <- getNextTempReg
         r9 <- getNextTempReg
-        let bType = bracketToArrT b
+        let bType = bracketToArrT b t2
         let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
         let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
         let bType' = LLVM.SSize (typeName ++ show (j-1))
@@ -642,7 +614,7 @@ emitMultiArray b t2 = case b of
         emit $ LLVM.Raw $ "L" ++ show l1 ++ ":" -- Label at top
         emit $ LLVM.Ass r5 (LLVM.Load LLVM.Word r3)            
         emit $ LLVM.Ass r4 (LLVM.Compare LLVM.Eq LLVM.Word r2 r5)
-        emit $ LLVM.CondB r4 l2 l3  
+        emit $ LLVM.CondB r4 l3 l2   
         emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
 
         ret2 <- emitMultiArray b' t2
@@ -665,7 +637,7 @@ emitMultiArray b t2 = case b of
 -- Declare a array with the passed Bracket and Type  
 emitArray :: Bracket -> Type -> CodeGen LLVM.Val
 emitArray b t2 = do
-    let bType = bracketToArrT b
+    let bType = bracketToArrT b t2
     let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
     let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
     let bType' = LLVM.SSize (typeName ++ show (j-1))
@@ -681,7 +653,7 @@ emitArray b t2 = do
         (Brackets e t) -> mapM compileExp e
         (NoBracket e) -> mapM compileExp e
     
-    let f = "@calloc(i32 " ++ show e' ++ ", " ++ (LLVM.showSize(typeToItype t2)) ++ " " ++ show r3 ++")"
+    let f = "@calloc(i32 " ++ show e' ++ ", i32 " ++ show r3 ++")"
     emit $ LLVM.Ass r2 (LLVM.Invoke (LLVM.P LLVM.Byte) f)
     case j > 0 of
         True  -> emit $ LLVM.Ass r5 (LLVM.BitCast (LLVM.P LLVM.Byte) r2 (LLVM.P $ LLVM.A bType' 0)) 
@@ -696,7 +668,6 @@ emitArray b t2 = do
     case j > 0 of
         True  -> emit $ LLVM.Store (LLVM.P (LLVM.A bType' 0)) r5 (LLVM.P (LLVM.A bType' 0)) r7
         False -> emit $ LLVM.Store (LLVM.P (LLVM.A (typeToItype t2) 0)) r5 (LLVM.P (LLVM.A (typeToItype t2) 0)) r7
-    blank     
     return r1 
 
 -- Returns the size of type inside a register.
@@ -705,7 +676,7 @@ getHardwareSizeOfType t = do
     r1 <- getNextTempReg
     r2 <- getNextTempReg
     emit $ LLVM.Ass r1 (LLVM.Raw $ "getelementptr " ++ (LLVM.showSize (LLVM.P (typeToItype t))) ++ " null, i32 1")
-    emit $ LLVM.Ass r2 (LLVM.PtrToInt (typeToItype t) r1 (typeToItype t))
+    emit $ LLVM.Ass r2 (LLVM.PtrToInt (typeToItype t) r1 LLVM.Word)
     return r2
 
 -- Generats and returns the code for the arguments to a code block/method.
@@ -776,18 +747,15 @@ typeToArrT Bool = LLVM.SSize "%arrBool0"
 --tTATh :: Type -> Int -> LLVM.Size 
 --tTATh t1 i = LLVM.SSize (((\(LLVM.SSize x) -> takeWhile (not.isDigit) x) (typeToArrT t1)) ++(show $ i - ( sum (zipWith (*) ( reverse ( map digitToInt ((\(LLVM.SSize x) -> filter isDigit x) (typeToArrT t1)))) [1,10..])))) 
 
--- Finds the array type for the input Bracket.
-bracketToArrT :: Bracket -> LLVM.Size
-bracketToArrT b'@(Brackets (e@(ETyped e' t):es) b) = case t of
-    Int  -> LLVM.SSize ("%arrInt" ++ show (arrayFindDepth b'))
-    Doub -> LLVM.SSize ("%arrDoub" ++ show (arrayFindDepth b'))
-    Bool -> LLVM.SSize ("%arrBool" ++ show (arrayFindDepth b'))
-bracketToArrT (NoBracket (e@(ETyped e' t):es)) = case t of
-    Int  -> LLVM.SSize "%arrInt0"
-    Doub -> LLVM.SSize "%arrDoub0"
-    Bool -> LLVM.SSize "%arrBool0"
+-- Finds the array type for the input Bracket and type.
+bracketToArrT :: Bracket -> Type -> LLVM.Size
+bracketToArrT b t = case t of
+    Int  -> LLVM.SSize ("%arrInt" ++ show (arrayFindDepth b))
+    Doub -> LLVM.SSize ("%arrDoub" ++ show (arrayFindDepth b))
+    Bool -> LLVM.SSize ("%arrBool" ++ show (arrayFindDepth b))
+    (ArrayT t' b') -> bracketToArrT b t'
 
--- Finds trhe depth of the input Bracket
+-- Finds the depth of the input Bracket
 arrayFindDepth :: Bracket -> Int
 arrayFindDepth (Brackets e b) = (arrayFindDepth b) + 1 
 arrayFindDepth (NoBracket e) = 0

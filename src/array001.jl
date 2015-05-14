@@ -5,8 +5,9 @@ int main() {
   //int j;
   a[0][1] = 4;
   
-  //for (int x : a) printInt(x);
-  //printInt(a.length);
+  
+  for (int x : a) printInt(x);
+  //printInt(a[0][1]);
 /*
   while (j<a.length) {
      a[j] = j;

@@ -73,13 +73,14 @@ checkStm s = case s of
         b' <- checkBlock b
         exitBlock
         return (BStmt b')  
-    (Decl t items) -> case t of
+    (Decl t items) -> do
+            retItems <- loopHelper t items
+            return (Decl t retItems)
+            {-case t of
         ArrayT t' b ->  do
             retItems <- loopHelper t' items
             return (Decl t retItems)
-        _              -> do
-            retItems <- loopHelper t items
-            return (Decl t retItems)
+        _              ->-} 
     (Ass e1 e2) -> do
         case e1 of
             (EVar id) -> do
@@ -90,12 +91,12 @@ checkStm s = case s of
                     "expected numeric type, but found " ++ printTree t ++
                     " when checking " ++ printTree id
                 return (Ass ret ret')
-            index@(EIndex e3 e4) -> do
+            index@(EIndex e3 b) -> do
                 ret@(ETyped e t) <- inferExp index
                 ret'@(ETyped e' t') <- inferExp e2
                 unless (t == t') $ fail $
                     "expected numeric type, but found " ++ printTree t ++
-                    " when checking " ++ printTree index
+                    " when checking " ++ printTree index ++ " in index assignment " ++ printTree t'
                 return (Ass ret ret')
     (Incr id) -> do
         t <- lookVar id
@@ -167,8 +168,11 @@ checkStm s = case s of
         newBlock
         checkDupe id
         extendCont id t
-        expr'@(ETyped _ (ArrayT t2 _)) <- inferExp expr
-        unless (t == t2) $ fail $ "Array has type " ++ printTree t2 ++ 
+        expr'@(ETyped e t2@(ArrayT t2' b2)) <- inferExp expr
+        ret <- case t of
+            (ArrayT t' b) -> emptyBracketNumber t2' b2 b
+            _ -> return t2' 
+        unless (t == ret) $ fail $ "Array has type " ++ printTree t2 ++ 
             " but variable in for each statment has type " ++ printTree t
         stm' <- checkStm stm
         exitBlock     
@@ -235,13 +239,10 @@ inferExp e = case e of
                 return (ETyped (EApp id ts') t) 
     (EString str)   -> return (ETyped (EString str) Void)
     (EIndex e b) -> do
-        --fail $ printTree e
-        --e2'@(ETyped _ t) <- inferExp e2
-        --unless (t == Int) $ fail $ 
-          --  "Expected type int but found type " ++ printTree t
         b' <- inferBracket b  
-        e'@(ETyped _ t1) <- inferExp e
-        return (ETyped (EIndex e' b') t1)
+        e'@(ETyped _ t1@(ArrayT t2 b2)) <- inferExp e
+        newB <- emptyBracketNumber t2 b2 b 
+        return (ETyped (EIndex e' b') newB) 
     (EDot e1 e2@(EVar (Ident s))) -> do
         unless (s == "length") $ fail $ --TODO add general
             "Expected length after do but found " ++ printTree e2
@@ -270,7 +271,8 @@ inferExp e = case e of
         return (ETyped  (EOr e1' e2') t)
     (EArr t@(ArrayT t' b)) -> do
         expr <- inferBracket b
-        return (ETyped (EArr (ArrayT t' expr)) t' )
+        b' <- (emptyBracket b)
+        return (ETyped (EArr (ArrayT t' expr)) (ArrayT t' b') )
 
 -- Infer a certain bracket.
 inferBracket :: Bracket -> EnvM Bracket
@@ -285,7 +287,19 @@ inferBracket b1 = case b1 of
         unless (t == Int) $ fail $ "Expected type int but found type " ++ printTree t
         return (NoBracket expr)
       
-        
+emptyBracket :: Bracket -> EnvM Bracket
+emptyBracket (NoBracket e) = return (NoBracket [])
+emptyBracket (Brackets e b) = do
+    b' <- emptyBracket b   
+    return (Brackets [] b')
+    
+emptyBracketNumber :: Type -> Bracket -> Bracket -> EnvM Type
+emptyBracketNumber t (NoBracket e) _ = return t
+emptyBracketNumber t b1@(Brackets e' b') b2 = case b2 of
+    NoBracket e -> return (ArrayT t b')
+    Brackets e b -> do
+        ret <- emptyBracketNumber t b' b
+        return ret   
 
 -- Help function to find the type of an array.    
 findArrType:: Type -> Type
@@ -398,9 +412,7 @@ setReturn :: Bool -> EnvM()
 setReturn b = EnvM $ do 
     env <- get
     put $ env {returnOk = b}
-
-
-    
+  
 getReturn :: EnvM Bool
 getReturn = EnvM $ do
     ret <- gets returnOk
