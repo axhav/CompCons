@@ -278,8 +278,10 @@ compileStm s = do
                     e' <- compileExp expr
                     emit $ LLVM.Store (argTy t) e' (argTy t) r
                 (ETyped (EIndex (ETyped (EVar id) _) b) t') -> do
+                    (_,ArrayT t' b') <- lookupVar id
                     r <- getVarReg id
-                    r1 <- compileBracket b r t'
+                    r1 <- compileBracket b' r t b
+--                    r1 <- compileBracket b r t' b
                     e4' <- compileExp expr
                     emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r1 
                 _ -> do
@@ -433,10 +435,13 @@ compileExp (ETyped (EString s) t) = do
     emit $ LLVM.Ass r2 (LLVM.TwoArray l r1 0 0)
     return r2
 compileExp (ETyped (EIndex e1@(ETyped (EVar id) _) b) t) = do
+    (_,ArrayT t' b') <- lookupVar id
     r <- getVarReg id
-    r1 <- compileBracket b r t
+    r1 <- compileBracket b' r t b
     r2 <- getNextTempReg
-    emit $ LLVM.Ass r2 (LLVM.Load (typeToItype t) r1)
+    case cmpBracketLenght b' b of
+        True -> emit $ LLVM.Ass r2 (LLVM.Load (typeToItype t) r1)
+        _           -> emit $ LLVM.Ass r2 (LLVM.Load (bracketToArrT b t) r1)
     return r2
 compileExp (ETyped (EDot e1 e2) t) = do 
     r <- compileExp e1
@@ -552,12 +557,13 @@ compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
 compileExp a = fail $ printTree a
 
 -- Compiles and finds the address for a index in a multi-arrays.
-compileBracket :: Bracket -> LLVM.Val -> Type -> CodeGen LLVM.Val
-compileBracket b r t = do
+compileBracket :: Bracket -> LLVM.Val -> Type -> Bracket -> CodeGen LLVM.Val
+compileBracket b r t b2 = do
         let bType = bracketToArrT b t
         let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
         let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
         let bType' = LLVM.SSize (typeName ++ show (j-1))
+        let bType'' = LLVM.SSize (typeName ++ show (j+1))
         r1 <- getNextTempReg
         r2 <- getNextTempReg
         r3 <- getNextTempReg
@@ -566,17 +572,23 @@ compileBracket b r t = do
         emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 1))
         case b of 
             (NoBracket e) -> do
-                (e':is) <- mapM compileExp e  
+                e' <- compileExp (getExpFromBracket b2)
                 emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
-                emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e') 
+                emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e')
+                --emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
                 return r3
             (Brackets e b') -> do
-                (e':is) <- mapM compileExp e
+                e' <- compileExp (getExpFromBracket b2)
                 emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A bType' 0)) r1)
                 emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A bType' 0)) r2 0 e') 
-                emit $ LLVM.Ass r4 (LLVM.Load bType' r3)
-                ret <- compileBracket b' r4 t
-                return ret 
+                
+                ret2  <- case b2 of
+                    NoBracket _ -> return r3
+                    Brackets _ b3-> do 
+                        emit $ LLVM.Ass r4 (LLVM.Load bType' r3)
+                        ret <- compileBracket b' r4 t b3
+                        return ret 
+                return ret2
 
 -- * Helps functions for the code generator.
 -- A help function that declars a multi-dimension array.
@@ -743,6 +755,18 @@ typeToArrT :: Type -> String
 typeToArrT Int = "%arrInt"
 typeToArrT Doub = "%arrDoub"
 typeToArrT Bool = "%arrBool"
+
+
+getExpFromBracket :: Bracket -> Expr
+getExpFromBracket (Brackets [e] b) = e
+getExpFromBracket (NoBracket [e]) = e
+
+cmpBracketLenght :: Bracket -> Bracket -> Bool
+cmpBracketLenght (NoBracket _) (NoBracket _) = True
+cmpBracketLenght (NoBracket _) _ = False
+cmpBracketLenght _ (NoBracket _) = False
+cmpBracketLenght (Brackets _ b1) (Brackets _ b2) = cmpBracketLenght b1 b2
+
 --typeToArrT (ArrayT t b) = tTATh t ((arrayFindDepth t) +1)
 
 --tTATh :: Type -> Int -> LLVM.Size 
@@ -778,7 +802,7 @@ declHelper (Init id expr) t = do
     case expr of
         (ETyped (EArr t1@(ArrayT t e)) t2) -> do
             e' <- (compileExp expr)
-            extendContextvVal id t e'
+            extendContextvVal id t1 e'
         (ETyped (EApp id1 e1s) (ArrayT t2 _)) -> do
             e' <- (compileExp expr)
             extendContextvVal id t e'    
