@@ -132,7 +132,7 @@ setNextGlobalVar s = do
     modify $ updateGlobalList ((LLVM.GString gName l (LLVM.VVal s)):)
     return gName
 
--- Insert new global variable into globalList and return the variable name. TODO
+-- Insert new global array struct into globalList and return the array struct name.
 setNextGlobalArr :: Type -> Bracket -> CodeGen String
 setNextGlobalArr t b = do
     gl <- gets globalList
@@ -142,7 +142,7 @@ setNextGlobalArr t b = do
             ((LLVM.GStruct _ gl1):gls) <- gets globalList
             let typeName = takeWhile (\x -> not (isNumber x) ) gl1
             let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
-            let gName = typeName ++ show (index+1) --TODO MAYBE not works for doub and bool?
+            let gName = typeName ++ show (index+1)
             unless ((filter (\ (LLVM.GStruct _ a) -> a == gName) gl) /= [] ) $
                 modify $ updateGlobalList ((LLVM.GStruct (LLVM.SSize ((typeToArrT t)++show index)) gName):)
             return gName 
@@ -283,7 +283,6 @@ compileStm s = do
                     r <- getVarReg id
                     r1 <- compileBracket b' r t b
                     e4' <- compileExp expr
---                    r1 <- compileBracket b r t' b
                     case cmpBracketLenght b' b of
                         True -> emit $ LLVM.Store (typeToItype t) e4' (typeToItype t) r1 
                         _    -> do
@@ -364,17 +363,14 @@ compileStm s = do
             r10 <- getNextTempReg
             r11 <- getNextTempReg
             r <- compileExp e
-            --fail $ printTree e 
             let bType = bracketToArrT b t1'
             let typeName = takeWhile (\x -> not (isNumber x) ) (LLVM.showSize bType)
             let j =  sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') (LLVM.showSize bType))))) [1,10..]]
             bType' <- case j of
                 0 -> return $ typeToItype t
                 _ -> return $ LLVM.SSize (typeName ++ show (j-1))
-             
-            
-            -- Init of variable for forEach loop           
-            emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 0)) -- arraySize
+                     
+            emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType r 0 (LLVM.VInt 0)) -- Gets arraySize
             emit $ LLVM.Ass r2 (LLVM.Load (typeToItype Int) r1)
             case bType' of 
                 LLVM.SSize _->  blank
@@ -559,7 +555,6 @@ compileExp (ETyped (EOr e1 e2) t) = do
     emit $ LLVM.Ass r3 (LLVM.Load (typeToItype t) r1)
     return r3
 compileExp (ETyped (EArr t1@(ArrayT t b)) t2) = do
-    --fail $ printTree t1 ++ "    " ++ printTree t ++ "     "++ printTree t2
     g <- setNextGlobalArr t b
     r1 <- emitMultiArray b t2
     return r1 
@@ -584,7 +579,6 @@ compileBracket b r t b2 = do
                 e' <- compileExp (getExpFromBracket b2)
                 emit $ LLVM.Ass r2 (LLVM.Load (LLVM.P (LLVM.A (typeToItype t) 0)) r1)
                 emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A (typeToItype t) 0)) r2 0 e')
-                --emit $ LLVM.Ass r4 (LLVM.Load (typeToItype t) r3)
                 return r3
             (Brackets e b') -> do
                 e' <- compileExp (getExpFromBracket b2)
@@ -592,14 +586,15 @@ compileBracket b r t b2 = do
                 emit $ LLVM.Ass r3 (LLVM.GetElmPtr (LLVM.P (LLVM.A bType' 0)) r2 0 e') 
                 
                 ret2  <- case b2 of
-                    NoBracket _ -> return r3
-                    Brackets _ b3-> do 
+                    NoBracket _   -> return r3
+                    Brackets _ b3 -> do 
                         emit $ LLVM.Ass r4 (LLVM.Load bType' r3)
                         ret <- compileBracket b' r4 t b3
                         return ret 
                 return ret2
 
 -- * Helps functions for the code generator.
+
 -- A help function that declars a multi-dimension array.
 emitMultiArray :: Bracket -> Type -> CodeGen LLVM.Val
 emitMultiArray b t2 = case b of
@@ -622,7 +617,6 @@ emitMultiArray b t2 = case b of
         let bType' = LLVM.SSize (typeName ++ show (j-1))
         ret <- emitArray b t2     
         blank
-        comment $ printTree b
         emit $ LLVM.Ass r1 (LLVM.GetElmPtr bType ret 0 (LLVM.VInt 0))
         emit $ LLVM.Ass r2 (LLVM.Load LLVM.Word r1)
 
@@ -634,8 +628,6 @@ emitMultiArray b t2 = case b of
         emit $ LLVM.Ass r4 (LLVM.Compare LLVM.Eq LLVM.Word r2 r5)
         emit $ LLVM.CondB r4 l3 l2   
         emit $ LLVM.Raw $ "L" ++ show l2 ++ ":" -- Label after condition 
-		
-        blank
 		
         ret2 <- emitMultiArray b' t2
 
@@ -760,27 +752,24 @@ typeToItype Bool = LLVM.Bit
 typeToItype Void = LLVM.Void
 typeToItype (ArrayT t _) = typeToItype t
 
+-- Converts a type into a array type without the number.
 typeToArrT :: Type -> String
 typeToArrT Int = "%arrInt"
 typeToArrT Doub = "%arrDoub"
 typeToArrT Bool = "%arrBool"
 typeToArrT (ArrayT t b) = typeToArrT t
 
-
+-- Returns the exp from a bracket
 getExpFromBracket :: Bracket -> Expr
 getExpFromBracket (Brackets [e] b) = e
 getExpFromBracket (NoBracket [e]) = e
 
+-- Compares the legth of two brackets
 cmpBracketLenght :: Bracket -> Bracket -> Bool
 cmpBracketLenght (NoBracket _) (NoBracket _) = True
 cmpBracketLenght (NoBracket _) _ = False
 cmpBracketLenght _ (NoBracket _) = False
 cmpBracketLenght (Brackets _ b1) (Brackets _ b2) = cmpBracketLenght b1 b2
-
---typeToArrT (ArrayT t b) = tTATh t ((arrayFindDepth t) +1)
-
---tTATh :: Type -> Int -> LLVM.Size 
---tTATh t1 i = LLVM.SSize (((\(LLVM.SSize x) -> takeWhile (not.isDigit) x) (typeToArrT t1)) ++(show $ i - ( sum (zipWith (*) ( reverse ( map digitToInt ((\(LLVM.SSize x) -> filter isDigit x) (typeToArrT t1)))) [1,10..])))) 
 
 -- Finds the array type for the input Bracket and type.
 bracketToArrT :: Bracket -> Type -> LLVM.Size
@@ -797,7 +786,7 @@ arrayFindDepth (NoBracket e) = 0
 
 
 argTy :: Type -> LLVM.Size
-argTy (ArrayT t _) = LLVM.SSize ( typeToArrT t ++ show 0)
+argTy (ArrayT t b) = LLVM.SSize ( typeToArrT t ++ show (arrayFindDepth b))
 argTy t = typeToItype t
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
