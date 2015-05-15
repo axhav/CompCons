@@ -138,8 +138,7 @@ setNextGlobalArr t b = do
     gl <- gets globalList
     case b of
         (Brackets e b') -> do
-            setNextGlobalArr t b'
-            ((LLVM.GStruct _ gl1):gls) <- gets globalList
+            gl1 <- setNextGlobalArr t b'
             let typeName = takeWhile (\x -> not (isNumber x) ) gl1
             let index = sum [ y | y <- zipWith (*) (reverse (map digitToInt (filter isNumber (takeWhile (/=' ') gl1)))) [1,10..]]
             let gName = typeName ++ show (index+1)
