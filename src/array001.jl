@@ -1,22 +1,32 @@
 int main() {
 
-  double[][] a = new double[2][3];
+  //double[][] a = new double[2][3];
 
   //int j;
   printInt(123);
-  a[0][1] = 4.0;
+  //a[0][1] = 4.0;
 
   int i=0;
-  while (i<a.length) {
+  //int k=0;
+  /*while (i<a.length) {
     int j=0;
     while (j<a[0].length) {
        a[i][j] = 5.0;
        j++;
     }
     i++;
+  }*/
+  {
+    int j = 0;
+    {
+        int g = 0;
+    }
   }
   printInt(123);
-  int k=0;
+  /*{
+    int m = 0;
+  }
+   
   while (k<a.length) {
     int m=0;
     while (m<a[0].length) {
@@ -26,7 +36,7 @@ int main() {
     k++;
   }
   
-  /*
+ 
   for (double[] x : a)
   {
     for (double y : x) printDouble(y);

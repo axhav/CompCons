@@ -59,7 +59,7 @@ newBlock = do
     case cont of
         [] -> modify $ updateContexts $ (emptyContext :)
         _ ->do
-            let c@VarContext{next=(LLVM.VInt n)} = last cont
+            let c@VarContext{next=(LLVM.VInt n)} = head cont
             modify $ updateContexts $ (almostemptyContext (n) :)
 
 -- Ends current block.
@@ -265,6 +265,7 @@ compileStm s = do
             blank   
         (BStmt b) -> do
             newBlock 
+            --fail $ printTree b
             compileBlock b
             exitBlock
         (Decl t i) -> do
