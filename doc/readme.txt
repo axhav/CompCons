@@ -4,6 +4,11 @@ To run compiler:
 - ./jlc fileName.jl
 - Has now generated a executable file named a.out
 
+To run compile for x86:
+- Same as for llvm.
+- Need the argument -x86. Note: -x86 must be the second argument.
+- ./jlc fileName.jl -x86
+
 NOTE:
 You can only run jlc when you are located in the main installed directory. 
 Because or liking to lib directory doesn't work otherwise.  
