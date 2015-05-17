@@ -22,7 +22,8 @@ data Env = Env
   , code       :: [X86.Instruction]
   , label      :: X86.Label
   , tempReg    :: Int
-  , globalList :: [X86.Instruction]
+  , globalData :: [X86.Instruction]
+  , globalText :: [X86.Instruction]
   }
 
 type Contexts = [VarContext]
@@ -120,7 +121,19 @@ getVarReg id = undefined --do
 -- Insert new global variable into globalList and return the variable name.
 setNextGlobalVar :: String -> CodeGen X86.Val
 setNextGlobalVar s = undefined --do
-    
+
+-- Adds new global data into list
+addGlobalData:: X86.Val -> String -> CodeGen ()
+addGlobalData v s = do
+    gD <- gets globalData
+    when (gD == []) $ modify $ updateGlobalData ((X86.Raw "segment .data"):)
+    modify $ updateGlobalData ((X86.Raw ((show v) ++ " db " ++ show s)):)
+
+-- Adds new global text into list
+addGlobalText :: String -> CodeGen ()
+addGlobalText s = do
+    modify $ updateGlobalText ((X86.Raw ("global" ++ s)):)
+       
  
 -- * Environment
 
@@ -132,7 +145,8 @@ emptyEnv = Env
   , code       = []
   , label      = 0
   , tempReg    = 0
-  , globalList = []
+  , globalData = []
+  , globalText = [X86.Raw "segment .text\n"]
   }
 
 updateEnvSig :: Ident -> TopDef -> Env -> Env 
@@ -150,8 +164,11 @@ updateLabel f env = env { label = f ( label env)}
 updateTempReg :: (Int -> Int) -> Env -> Env
 updateTempReg f env = env { tempReg = f ( tempReg env)}
 
-updateGlobalList :: ([X86.Instruction] -> [X86.Instruction]) -> Env -> Env
-updateGlobalList f env = env { globalList = f (globalList env) }
+updateGlobalData :: ([X86.Instruction] -> [X86.Instruction]) -> Env -> Env
+updateGlobalData f env = env { globalData = f (globalData env) }
+
+updateGlobalText :: ([X86.Instruction] -> [X86.Instruction]) -> Env -> Env
+updateGlobalText f env = env { globalText = f (globalText env) }
 
 -- * Contexts
 
@@ -175,8 +192,9 @@ codeGen :: Program -> String
 codeGen prg = header ++ unlines (map X86.showInstruction lcode)
     where
         compileCode = compileProgram prg `execState` emptyEnv
-        lcode = reverse $ code compileCode ++ globalList compileCode
-        header = unlines ([""]) 
+        lcode = reverse $ code compileCode ++ globalText compileCode ++ globalData compileCode
+        header = unlines (["extern printInt", "extern printDouble", "extern printString", 
+                        "extern readInt", "extern readDouble",""]) 
 
 -- Compiles code for each method.
 compileProgram :: Program -> CodeGen ()
