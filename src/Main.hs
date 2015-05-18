@@ -56,10 +56,10 @@ check file arch s = case pProgram (myLexer s) of
                                 putStrLn "nasm assembler ERROR"
                                 exitWith exitCodeAs
                             ExitSuccess   -> do
-                                pLLC <- runProcess "llc" ["-filetype=asm", "./lib/runtime.bc"] Nothing Nothing Nothing (Just stderr) Nothing
+                                pLLC <- runProcess "llc" ["-filetype=asm", "-march=x86", "./lib/runtime.bc"] Nothing Nothing Nothing (Just stderr) Nothing
                                 waitForProcess pLLC
-                                let llvmGCC = replaceExtension asmFile ".o"
-                                pGCC <- runProcess "gcc" [llvmGCC, "./lib/runtime.s"] Nothing Nothing Nothing (Just stderr) Nothing
+                                let asmGCC = replaceExtension asmFile ".o"
+                                pGCC <- runProcess "gcc" [asmGCC, "./lib/runtime.s", "-m32"] Nothing Nothing Nothing (Just stderr) Nothing
                                 waitForProcess pGCC
                                 hPutStrLn stderr "OK"
                                 exitWith $ ExitSuccess

@@ -22,6 +22,7 @@ data Env = Env
   , code       :: [X86.Instruction]
   , label      :: X86.Label
   , tempReg    :: Int
+  , stackP     :: Int
   , globalData :: [X86.Instruction]
   , globalText :: [X86.Instruction]
   }
@@ -134,9 +135,10 @@ addGlobalData s = do
 
 -- Adds new global text into list
 addGlobalText :: String -> CodeGen ()
-addGlobalText s = do
-    modify $ updateGlobalText ((X86.Raw ("global" ++ s)):)
-       
+addGlobalText s = modify $ updateGlobalText ((X86.Raw ("global " ++ s)):)
+    
+incStackPointer :: Int -> CodeGen ()
+incStackPointer i = modify $ updateStackP (+i)
  
 -- * Environment
 
@@ -148,8 +150,9 @@ emptyEnv = Env
   , code       = []
   , label      = 0
   , tempReg    = 0
+  , stackP     = 0
   , globalData = []
-  , globalText = [X86.Raw "segment .text\n"]
+  , globalText = [X86.Raw "segment .text"]
   }
 
 updateEnvSig :: Ident -> TopDef -> Env -> Env 
@@ -172,6 +175,9 @@ updateGlobalData f env = env { globalData = f (globalData env) }
 
 updateGlobalText :: ([X86.Instruction] -> [X86.Instruction]) -> Env -> Env
 updateGlobalText f env = env { globalText = f (globalText env) }
+
+updateStackP :: (Int -> Int) -> Env -> Env
+updateStackP f env = env { stackP = f ( stackP env)}
 
 -- * Contexts
 
@@ -214,6 +220,7 @@ compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
     emit $ X86.Push (X86.VVal "dword ebp")
     emit $ X86.Move (X86.VVal "ebp") (X86.VVal "esp")
     allocateArgs args
+    compileBlock b
     exitBlock
 
 -- Compiles the code for all the statments within a block 
@@ -231,16 +238,27 @@ compileStm s = do
             newBlock 
             compileBlock b
             exitBlock
-        (Decl t i) -> undefined --do
-        (Ass e1 expr@(ETyped e t)) -> undefined --do
+        (Decl t i) -> do
+            for i
+                where for (item:[]) = declHelper item t
+                      for (item:items)= declHelper item t >> for items
+        (Ass e1@(ETyped (EVar id) _) expr@(ETyped e t)) -> do
+            e1' <- compileExp e1
+            e2' <- compileExp expr
+            emit $ X86.Move e1' e2'           
         (Incr id) -> undefined --do
         (Decr id) -> undefined --do
-        (Ret expr@(ETyped e t)) -> undefined --do
-        (VRet) -> undefined --do
+        (Ret expr@(ETyped e t)) -> do
+            expr' <- compileExp expr
+            emit $ X86.Move (X86.VVal "eax") expr'
+            emit $ X86.Return           
+        (VRet) -> emit $ X86.Return 
         (Cond expr@(ETyped e' t) stm) -> undefined --do
         (CondElse expr@(ETyped e' t) stm1 stm2) -> undefined --do
         (While expr@(ETyped e' t) stm) -> undefined -- do
-        (SExp expr) -> undefined --do
+        (SExp expr) -> do
+            compileExp expr
+            return ()
 
 -- Compiles a expression
 compileExp :: Expr -> CodeGen X86.Val
@@ -248,8 +266,15 @@ compileExp (ETyped (ELitTrue) t) = return $ X86.VInt 1
 compileExp (ETyped (ELitFalse) t) = return $ X86.VInt 0
 compileExp (ETyped (ELitInt i) t) = return $ X86.VInt i
 compileExp (ETyped (ELitDoub d) t) = return $ X86.VDoub d
-compileExp (ETyped (EVar id) t) = undefined --case t of
-compileExp (ETyped (EApp id'@(Ident id) exps) t) = undefined --do
+compileExp (ETyped (EVar id) t) = do
+    (v,_)<- lookupVar id
+    return $ v
+compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
+    expr' <- mapM compileExp exps
+    mapM (\(x,ETyped e t) -> emit $ X86.Push2 (typeToItype t) x) (zip (reverse expr') (reverse exps))
+    emit $ X86.Invoke id
+    mapM (\x -> emit $ X86.Add (X86.VVal "esp") (X86.VInt 4)) (reverse expr')
+    return $ X86.VVal "eax"
 compileExp (ETyped (EString s) t) = do
     nameS <- addGlobalData s
     emit $ X86.Push nameS
@@ -343,8 +368,19 @@ typeToNrBytes Bool = 1
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
 declHelper :: Item -> Type -> CodeGen ()
-declHelper (NoInit id) t = undefined --do
-declHelper (Init id expr) t = undefined --do
+declHelper (NoInit id) t = do
+    sP <- gets stackP
+    extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+    emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
+    emit $ X86.Move (X86.VVal ((X86.showSize (typeToItype t)) ++ " [ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
+    incStackPointer (typeToNrBytes t)
+declHelper (Init id expr) t = do
+    e <- compileExp expr
+    sP <- gets stackP
+    extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+    emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
+    emit $ X86.Move (X86.VVal ((X86.showSize (typeToItype t)) ++ " [ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
+    incStackPointer (typeToNrBytes t)
 
 
     

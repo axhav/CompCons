@@ -26,7 +26,9 @@ data Size = Bit | Byte | Word | DWord | Void | SSize String | P Size | A Size In
 
 data Instruction
     = Move Val Val
+    | Move2 Size Val Val
     | Push Val 
+    | Push2 Size Val 
    -- | Load Size Val
    -- | Store Size Val Size Val
     | Ass Val Instruction
@@ -50,7 +52,9 @@ data Instruction
 
 showInstruction :: Instruction -> String 
 showInstruction (Move v1 v2)        = "mov " ++ show v1 ++ ", " ++ show v2
+showInstruction (Move2 s v1 v2)     = "mov " ++ showSize s ++ " " ++ show v1 ++ ", " ++ show v2
 showInstruction (Push v)            = "push " ++ show v
+showInstruction (Push2 s v)         = "push " ++ showSize s ++ " " ++ show v
 --showInstruction (Load s v)          = "load " ++ showSize s ++ "* " ++ show v
 --showInstruction (Store s1 v1 s2 v2) = "store " ++ showSize s1 ++ " " ++ show v1 ++ " , " ++ showSize s2 ++ "* " ++ show v2 
 showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ showInstruction i
@@ -69,7 +73,7 @@ showInstruction (Not v)             = "not " ++ show v
 showInstruction (Compare v1 v2)     = "cmp " ++ show v1 ++ ", " ++ show v2
 showInstruction (And v1 v2)         = "test " ++ show v1 ++ ", " ++ show v2
 showInstruction (Or v1 v2)          = "or " ++ show v1 ++ " , " ++ show v2
-showInstruction (Return)            = "leave \n ret" 
+showInstruction (Return)            = "leave \nret" 
 showInstruction (Goto l)            = "jmp" ++ show l
 showInstruction (CondB s c l)       = (showCond s c) ++ " " ++ show l
 showInstruction (Comment s)         = ";" ++ s
@@ -80,8 +84,8 @@ showInstruction (Invoke f)          = "call " ++ f
 showSize :: Size -> String
 showSize Bit        = "i1"
 showSize Byte       = "i8"
-showSize Word       = "i32"
-showSize DWord      = "double"
+showSize Word       = "dword"
+showSize DWord      = "TODO"
 showSize Void       = "void"
 showSize (SSize s)  = s
 showSize (P s)      = showSize s ++ "*"
