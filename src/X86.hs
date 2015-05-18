@@ -44,7 +44,7 @@ data Instruction
     | Or Val Val
     | Return
     | Goto Label
-    | CondB Size Cond Label
+    | CondB Val Label
     | Comment String
     | Raw String
     | Invoke String 
@@ -74,8 +74,8 @@ showInstruction (Compare v1 v2)     = "cmp " ++ show v1 ++ ", " ++ show v2
 showInstruction (And v1 v2)         = "test " ++ show v1 ++ ", " ++ show v2
 showInstruction (Or v1 v2)          = "or " ++ show v1 ++ " , " ++ show v2
 showInstruction (Return)            = "leave \nret" 
-showInstruction (Goto l)            = "jmp" ++ show l
-showInstruction (CondB s c l)       = (showCond s c) ++ " " ++ show l
+showInstruction (Goto l)            = "jmp L" ++ show l
+showInstruction (CondB c l)       = (showCond c) ++ " L" ++ show l
 showInstruction (Comment s)         = ";" ++ s
 showInstruction (Raw s)             = s
 showInstruction (Invoke f)          = "call " ++ f
@@ -97,14 +97,14 @@ showVal (VDoub d)= show d
 showVal (VInt i) = show i
 
 
-showCond :: Size -> Cond -> String
+showCond :: Val -> String
 {-showCond DWord Eq = "ueq"
 showCond DWord Ne = "une"
 showCond DWord Sgt = "ugt"
 showCond DWord Sge = "uge"
 showCond DWord Slt = "ult"
 showCond DWord Sle = "ule"-}
-showCond _ c =[toLower (head (show c))] ++ tail (show c)
+showCond c =[toLower (head (show c))] ++ tail (show c)
 
 
 

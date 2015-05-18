@@ -245,7 +245,7 @@ compileStm s = do
         (Ass e1@(ETyped (EVar id) _) expr@(ETyped e t)) -> do
             e1' <- compileExp e1
             e2' <- compileExp expr
-            emit $ X86.Move e1' e2'           
+            emit $ X86.Move2 (typeToItype t) e1' e2'           
         (Incr id) -> undefined --do
         (Decr id) -> undefined --do
         (Ret expr@(ETyped e t)) -> do
@@ -253,9 +253,33 @@ compileStm s = do
             emit $ X86.Move (X86.VVal "eax") expr'
             emit $ X86.Return           
         (VRet) -> emit $ X86.Return 
-        (Cond expr@(ETyped e' t) stm) -> undefined --do
-        (CondElse expr@(ETyped e' t) stm1 stm2) -> undefined --do
-        (While expr@(ETyped e' t) stm) -> undefined -- do
+        (Cond expr@(ETyped e' t) stm) -> do
+            l1 <- getNextLabel
+            expr' <- compileExp expr 
+            emit $ X86.CondB expr' l1
+            compileStm stm
+            emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+        (CondElse expr@(ETyped e' t) stm1 stm2) -> do
+            l1 <- getNextLabel
+            l2 <- getNextLabel
+            expr' <- compileExp expr 
+            emit $ X86.CondB expr' l1
+            compileStm stm1
+            emit $ X86.Goto l2
+            emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+            compileStm stm2
+            emit $ X86.Raw $ "L" ++ show l2 ++ ":"
+        (While expr@(ETyped e' t) stm) -> do
+            l1 <- getNextLabel
+            l2 <- getNextLabel
+            emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+            expr' <- compileExp expr 
+            emit $ X86.Move (X86.VVal "eax") expr'
+            emit $ X86.Compare (X86.VVal "eax") (X86.VInt 0)
+            emit $ X86.CondB (X86.VVal "je") l2
+            compileStm stm
+            emit $ X86.Goto l1
+            emit $ X86.Raw $ "L" ++ show l2 ++ ":"
         (SExp expr) -> do
             compileExp expr
             return ()
@@ -280,7 +304,11 @@ compileExp (ETyped (EString s) t) = do
     emit $ X86.Push nameS
     emit $ X86.Invoke "printString"
     return $ X86.VVal "No!" --TODO Should not return anything?
-compileExp (ETyped (Neg e) t) = undefined --do
+compileExp (ETyped (Neg e) t) = do
+    e' <- compileExp e
+    
+    emit $ X86.Sub (X86.VVal "eax") e'
+    return $ X86.VVal "eax"
 compileExp (ETyped (Not e) t) = undefined --do
 compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
@@ -292,20 +320,25 @@ compileExp (ETyped (EMul e1 o e2) t) = do
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
+    emit $ X86.Move (X86.VVal "eax") e1'
     case o of 
-        Plus  -> undefined --do
-        Minus -> undefined --do 
+        Plus  -> do
+            emit $ X86.Add (X86.VVal "eax") e2'
+            return (X86.VVal "eax")
+        Minus -> do
+            emit $ X86.Add (X86.VVal "eax") e2'
+            return (X86.VVal "eax")
 compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     e1' <- compileExp e1
     e2' <- compileExp e2
-    r <- getNextTempReg
+    emit $ X86.Compare e1' e2'
     case o of 
-        LTH -> undefined --do
-        LE  -> undefined --do
-        GTH -> undefined --do
-        GE  -> undefined --do
-        EQU -> undefined --do
-        NE  -> undefined --do
+        LTH -> return $ X86.VVal "jge"
+        LE  -> return $ X86.VVal "jg"
+        GTH -> return $ X86.VVal "jle"
+        GE  -> return $ X86.VVal "jl"
+        EQU -> return $ X86.VVal "jne"
+        NE  -> return $ X86.VVal "je"
 compileExp (ETyped (EAnd e1 e2) t) = undefined --do
 compileExp (ETyped (EOr e1 e2) t) = undefined --do
 compileExp a = fail $ printTree a
