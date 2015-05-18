@@ -33,7 +33,8 @@ data Instruction
    -- | Store Size Val Size Val
     | Ass Val Instruction
     | Mul Val Val
-    | Div Val Val
+    | Div Val
+    | Div2 Size Val
     | Add Val Val
     | Sub Val Val
     | Neg Val
@@ -62,7 +63,8 @@ showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ sh
 --showInstruction (Mul DWord v1 v2)   = "fmul " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Mul v1 v2)         = "imul " ++ show v1 ++ ", " ++ show v2
 --showInstruction (Div DWord v1 v2)   = "fdiv " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
-showInstruction (Div v1 v2)         = "sdiv " ++ show v1 ++ ", " ++ show v2
+showInstruction (Div v1)            = "idiv " ++ show v1
+showInstruction (Div2 s v1)         = "idiv " ++ showSize s ++ " " ++ show v1
 showInstruction (Add v1 v2)         = "add " ++ show v1 ++ ", " ++ show v2
 showInstruction (Sub v1 v2)         = "sub " ++ show v1 ++ ", " ++ show v2
 --showInstruction (Neg DWord v)       = "fsub " ++ showSize DWord ++ " 0.0, " ++ show v

@@ -306,17 +306,37 @@ compileExp (ETyped (EString s) t) = do
     return $ X86.VVal "No!" --TODO Should not return anything?
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
-    
-    emit $ X86.Sub (X86.VVal "eax") e'
-    return $ X86.VVal "eax"
-compileExp (ETyped (Not e) t) = undefined --do
+    emit $ X86.Neg e'
+    return $ e'
+compileExp (ETyped (Not e) t) = do
+    e' <- compileExp e
+    emit $ X86.Not e'
+    return $ e' 
 compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
     case o of
-        Times -> undefined --do
-        Div   -> undefined --do
-        Mod   -> undefined --do 
+        Times -> do
+            emit $ X86.Mul e1' e2'
+            return e1'
+        Div   -> do
+            doDiv e1' e2'        
+            return $ (X86.VVal "eax")
+        Mod   -> do
+            doDiv e1' e2'
+            return $ (X86.VVal "edx")     
+    where
+        doDiv e1' e2' = do
+            emit $ X86.Move (X86.VVal "edx") (X86.VInt 0)
+            emit $ X86.Move2 (typeToItype t) (X86.VVal "eax") e1'
+            case e2' of
+                (X86.VVal s2) -> do
+                    case (s2 !! 0) == '[' of
+                        True -> emit $ X86.Div2 (typeToItype t) e2'
+                        False -> emit $ X86.Div e2'
+                _ -> do
+                    emit $ X86.Move (X86.VVal "ebx") e2'
+                    emit $ X86.Div (X86.VVal "ebx")     
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
@@ -405,14 +425,14 @@ declHelper (NoInit id) t = do
     sP <- gets stackP
     extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
-    emit $ X86.Move (X86.VVal ((X86.showSize (typeToItype t)) ++ " [ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
+    emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
     incStackPointer (typeToNrBytes t)
 declHelper (Init id expr) t = do
     e <- compileExp expr
     sP <- gets stackP
     extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
-    emit $ X86.Move (X86.VVal ((X86.showSize (typeToItype t)) ++ " [ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
+    emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
     incStackPointer (typeToNrBytes t)
 
 
