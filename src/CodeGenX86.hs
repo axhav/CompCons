@@ -122,12 +122,15 @@ getVarReg id = undefined --do
 setNextGlobalVar :: String -> CodeGen X86.Val
 setNextGlobalVar s = undefined --do
 
--- Adds new global data into list
-addGlobalData:: X86.Val -> String -> CodeGen ()
-addGlobalData v s = do
+-- Adds new global data into list and returns the name of created data
+addGlobalData:: String -> CodeGen X86.Val
+addGlobalData s = do
     gD <- gets globalData
     when (gD == []) $ modify $ updateGlobalData ((X86.Raw "segment .data"):)
-    modify $ updateGlobalData ((X86.Raw ((show v) ++ " db " ++ show s)):)
+    gD <- gets globalData
+    let gName = "str" ++ show (length gD)
+    modify $ updateGlobalData ((X86.Raw (gName ++ " db " ++ show s)):)
+    return $ X86.VVal gName
 
 -- Adds new global text into list
 addGlobalText :: String -> CodeGen ()
@@ -259,7 +262,11 @@ compileExp (ETyped (ELitInt i) t) = return $ X86.VInt i
 compileExp (ETyped (ELitDoub d) t) = return $ X86.VDoub d
 compileExp (ETyped (EVar id) t) = undefined --case t of
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = undefined --do
-compileExp (ETyped (EString s) t) = undefined --do
+compileExp (ETyped (EString s) t) = do
+    nameS <- addGlobalData s
+    emit $ X86.Push nameS
+    emit $ X86.Invoke "printString"
+    return $ X86.VVal "No!" --TODO Should not return anything?
 compileExp (ETyped (Neg e) t) = undefined --do
 compileExp (ETyped (Not e) t) = undefined --do
 compileExp (ETyped (EMul e1 o e2) t) = do

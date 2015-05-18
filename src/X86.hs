@@ -26,7 +26,7 @@ data Size = Bit | Byte | Word | DWord | Void | SSize String | P Size | A Size In
 
 data Instruction
     = Move Val Val
-    | Push Size Val 
+    | Push Val 
    -- | Load Size Val
    -- | Store Size Val Size Val
     | Ass Val Instruction
@@ -50,7 +50,7 @@ data Instruction
 
 showInstruction :: Instruction -> String 
 showInstruction (Move v1 v2)        = "mov " ++ show v1 ++ ", " ++ show v2
-showInstruction (Push s v)          = "push " ++ showSize s ++ " " ++ show v
+showInstruction (Push v)            = "push " ++ show v
 --showInstruction (Load s v)          = "load " ++ showSize s ++ "* " ++ show v
 --showInstruction (Store s1 v1 s2 v2) = "store " ++ showSize s1 ++ " " ++ show v1 ++ " , " ++ showSize s2 ++ "* " ++ show v2 
 showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ showInstruction i
