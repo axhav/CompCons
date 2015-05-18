@@ -208,25 +208,13 @@ compileProgram (Program defs) = do
 -- Compiles the code for a method.
 compileDef :: TopDef -> CodeGen ()
 compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
-    newBlock     
-    args' <- showA args
-    emit $ X86.Raw $ "define " ++ X86.showSize (typeToItype t) ++ " @"++ id ++ "(" ++ args' ++ ") {"
+    newBlock 
+    addGlobalText id    
+    emit $ X86.Raw $ id ++ ":"
+    emit $ X86.Push (X86.VVal "dword ebp")
+    emit $ X86.Move (X86.VVal "ebp") (X86.VVal "esp")
     allocateArgs args
-    case t of
-         Void -> do -- For adding return stament in void functions.
-            case drop ((length ss) - 1) ss of
-                [VRet] -> compileBlock b
-                _      -> do
-                    let b = Block (ss ++ [VRet])
-                    compileBlock b
-         _    -> do -- For checking if last statment was a condition.
-            compileBlock b
-            let ssl = last ss
-            case ssl of
-                Ret _ -> blank
-                _     -> emit $ X86.Raw $ "unreachable"
     exitBlock
-    emit $ X86.Raw $ "}"
 
 -- Compiles the code for all the statments within a block 
 compileBlock :: Block -> CodeGen ()
@@ -324,10 +312,20 @@ showE (t:ts) ((X86.VInt i):is) = (X86.showSize (typeToItype t)) ++ " " ++ show i
 showE (t:ts) ((X86.VDoub d):ds) = (X86.showSize (typeToItype t)) ++ " " ++ show d ++ " , " ++ showE ts ds
 
 -- Saves/allocates the arguemnts register onto the stack.
+allocateArgsNr :: [Arg] -> Int -> CodeGen ()
+allocateArgsNr [] i = return ()
+allocateArgsNr [Arg t id] i = extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i))) 
+allocateArgsNr ((Arg t id):args) i = do
+    extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i)))
+    allocateArgsNr args (i+typeToNrBytes t)
+ 
 allocateArgs :: [Arg] -> CodeGen ()
 allocateArgs [] = return ()
-allocateArgs [Arg t id] = undefined --case t of
-allocateArgs ((Arg t id):args) = undefined --case t of
+allocateArgs [Arg t id] = extendContextvVal id t (X86.VVal "[ebp+8]")
+allocateArgs ((Arg t id):args) = do
+    extendContextvVal id t (X86.VVal "[ebp+8]")
+    allocateArgsNr args 8
+   
 
 -- Contverts from Type to X86 types.
 typeToItype :: Type -> X86.Size
@@ -336,6 +334,11 @@ typeToItype Doub = X86.DWord
 typeToItype Bool = X86.Bit
 typeToItype Void = X86.Void
 typeToItype (ArrayT t _) = typeToItype t
+
+typeToNrBytes :: Type -> Int
+typeToNrBytes Int = 4
+typeToNrBytes Doub = 8
+typeToNrBytes Bool = 1
 
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
