@@ -126,10 +126,13 @@ getNextTempReg t = case t of
 resetTempReg  :: CodeGen ()
 resetTempReg = do
     dt <- gets dTempReg
-    loop dt
+    case dt > 0 of 
+        True -> loop dt
+        False -> loop (-1)
     modify $ updateDTempReg (\x -> 0)
     modify $ updateTempReg (\x -> [X86.VVal "eax",X86.VVal "ebx",X86.VVal "ecx",X86.VVal "edx"])
     where 
+        loop (-1) = return ()
         loop 0 = emit $ X86.FFree 0
         loop i = emit (X86.FFree i) >> loop (i-1)
         
@@ -151,7 +154,7 @@ addGlobalData t s = do
     gD <- gets globalData
     let gName = "str" ++ show (length gD)
     case t of
-        Void ->  modify $ updateGlobalData ((X86.Raw (gName ++ " db " ++ show s)):)
+        Void ->  modify $ updateGlobalData ((X86.Raw (gName ++ " db " ++ show s ++ " , 0" )):)
         _    ->  modify $ updateGlobalData ((X86.Raw (gName ++ " dq " ++ s)):)
     return $ X86.VVal gName
 
@@ -313,7 +316,7 @@ compileStm s = do
             case b1 of
                 True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
                 False -> emit $ X86.Compare expr' (X86.VInt 0)
-            emit $ X86.CondB (X86.VVal "je") l2
+            emit $ X86.CondB (X86.VVal "je") l1
             compileStm stm1
             emit $ X86.Goto l2
             emit $ X86.Raw $ "L" ++ show l1 ++ ":"
@@ -374,6 +377,7 @@ compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     return $ X86.VVal "eax"
 compileExp (ETyped (EString s) t) = do
     nameS <- addGlobalData t s
+    emit $ X86.Cld
     return $ nameS
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e

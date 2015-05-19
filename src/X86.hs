@@ -63,6 +63,7 @@ data Instruction
     | Fst Val
     | Fldz
     | Fld1
+    | Cld
     deriving (Eq)
 
 showInstruction :: Instruction -> String 
@@ -107,11 +108,13 @@ showInstruction (Fxch v)            = "fxch " ++ show v
 showInstruction (Fst v)             = "fst qword " ++ show v 
 showInstruction (Fldz)              = "fldz" 
 showInstruction (Fld1)              = "fld1" 
+showInstruction (Cld)               = "cld" 
+
 
 
 showSize :: Size -> String
-showSize Bit        = "byte"
-showSize Byte       = "byte"
+showSize Bit        = "dword"
+showSize Byte       = "dword"
 showSize Word       = "dword"
 showSize DWord      = "qword"
 showSize Void       = "void"
