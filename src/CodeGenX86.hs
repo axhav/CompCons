@@ -368,7 +368,10 @@ compileExp (ETyped (EVar id) t) = do
             emit $ X86.Fld v
             r <- getNextTempReg t
             return r
-        _      -> return $ v
+        _      -> do
+            r <- getNextTempReg t
+            emit $ X86.Move r v
+            return r
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     expr' <- mapM compileExp exps
     mapM (\(x,ETyped e t) -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
@@ -386,13 +389,18 @@ compileExp (ETyped (Neg e) t) = do
             emit $ X86.Fxch e'
             emit $ X86.FNeg
             emit $ X86.Fxch e'
+            return $ e'
         _    -> do
-            emit $ X86.Neg e'
-    return $ e'
+            r <- getNextTempReg t
+            emit $ X86.Move r e'
+            emit $ X86.Neg r
+            return r
 compileExp (ETyped (Not e) t) = do
     e' <- compileExp e
-    emit $ X86.Not e'
-    return $ e' 
+    r <- getNextTempReg t
+    emit $ X86.Move r e'
+    emit $ X86.Not r
+    return $ r
 compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
@@ -408,6 +416,7 @@ compileExp (ETyped (EMul e1 o e2) t) = do
                 _    -> do
                     r1 <- getNextTempReg t
                     r2 <- getNextTempReg t
+                    emit $ X86.Move r1 e1'
                     emit $ X86.Move r2 e2'
                     emit $ X86.Mul r1 r2
                     return r1
@@ -497,8 +506,42 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     emit $ X86.Move r (X86.VInt 1)  
     emit $ X86.Raw $ "L" ++ show l2 ++ ":"
     return r
-compileExp (ETyped (EAnd e1 e2) t) = undefined --do
-compileExp (ETyped (EOr e1 e2) t) = undefined --do
+compileExp (ETyped (EAnd e1 e2) t) = do
+    l1 <- getNextLabel
+    l2 <- getNextLabel
+    l3 <- getNextLabel
+    e1' <- compileExp e1
+    r <- getNextTempReg t
+    emit $ X86.And e1' (X86.VInt 1)
+    emit $ X86.CondB (X86.VVal "je") l2
+    e2' <- compileExp e2
+    emit $ X86.And e1' e2'
+    emit $ X86.CondB (X86.VVal "je") l2 
+    emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+    emit $ X86.Move r (X86.VInt 0)
+    emit $ X86.Goto l3
+    emit $ X86.Raw $ "L" ++ show l2 ++ ":"
+    emit $ X86.Move r (X86.VInt 1)
+    emit $ X86.Raw $ "L" ++ show l3 ++ ":"
+    return r
+compileExp (ETyped (EOr e1 e2) t) = do
+    l1 <- getNextLabel
+    l2 <- getNextLabel
+    l3 <- getNextLabel
+    e1' <- compileExp e1
+    r <- getNextTempReg t
+    emit $ X86.And e1' (X86.VInt 0)
+    emit $ X86.CondB (X86.VVal "je") l2 
+    e2' <- compileExp e2
+    emit $ X86.Or e1' e2'
+    emit $ X86.CondB (X86.VVal "je") l2 
+    emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+    emit $ X86.Move r (X86.VInt 0)
+    emit $ X86.Goto l3
+    emit $ X86.Raw $ "L" ++ show l2 ++ ":"
+    emit $ X86.Move r (X86.VInt 1)
+    emit $ X86.Raw $ "L" ++ show l3 ++ ":"
+    return r
 compileExp a = fail $ printTree a
 
 
