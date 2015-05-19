@@ -21,7 +21,8 @@ data Env = Env
   , contexts   :: Contexts
   , code       :: [X86.Instruction]
   , label      :: X86.Label
-  , tempReg    :: Int
+  , tempReg    :: [X86.Val]
+  , dTempReg   :: Int
   , stackP     :: Int
   , globalData :: [X86.Instruction]
   , globalText :: [X86.Instruction]
@@ -111,9 +112,28 @@ getNextLabel = do
     return l 
 
 -- Return the next temp register number.
-getNextTempReg :: CodeGen X86.Val
-getNextTempReg = undefined --do
+getNextTempReg :: Type ->  CodeGen X86.Val
+getNextTempReg t = case t of
+    Doub -> do
+        r <- gets dTempReg
+        modify $ updateDTempReg (+1)
+        return $ X86.VVal ("st" ++ show r)
+    _    -> do
+        r <- gets tempReg
+        modify $ updateTempReg tail
+        return $ head r
     
+resetTempReg  :: CodeGen ()
+resetTempReg = do
+    dt <- gets dTempReg
+    loop dt
+    modify $ updateDTempReg (\x -> 0)
+    modify $ updateTempReg (\x -> [X86.VVal "eax",X86.VVal "ebx",X86.VVal "ecx",X86.VVal "edx"])
+    where 
+        loop 0 = emit $ X86.FFree 0
+        loop i = emit (X86.FFree i) >> loop (i-1)
+        
+
 
 -- Returns the register number for a variable.    
 getVarReg :: Ident -> CodeGen X86.Val
@@ -124,13 +144,15 @@ setNextGlobalVar :: String -> CodeGen X86.Val
 setNextGlobalVar s = undefined --do
 
 -- Adds new global data into list and returns the name of created data
-addGlobalData:: String -> CodeGen X86.Val
-addGlobalData s = do
+addGlobalData:: Type-> String -> CodeGen X86.Val
+addGlobalData t s = do
     gD <- gets globalData
     when (gD == []) $ modify $ updateGlobalData ((X86.Raw "segment .data"):)
     gD <- gets globalData
     let gName = "str" ++ show (length gD)
-    modify $ updateGlobalData ((X86.Raw (gName ++ " db " ++ show s)):)
+    case t of
+        Void ->  modify $ updateGlobalData ((X86.Raw (gName ++ " db " ++ show s)):)
+        _    ->  modify $ updateGlobalData ((X86.Raw (gName ++ " dq " ++ s)):)
     return $ X86.VVal gName
 
 -- Adds new global text into list
@@ -149,7 +171,8 @@ emptyEnv = Env
   , contexts   = []
   , code       = []
   , label      = 0
-  , tempReg    = 0
+  , tempReg    = [X86.VVal "eax",X86.VVal "ebx",X86.VVal "ecx",X86.VVal "edx"]
+  , dTempReg   = 0
   , stackP     = 0
   , globalData = []
   , globalText = [X86.Raw "segment .text"]
@@ -167,8 +190,11 @@ updateCode f env = env { code = f (code env) }
 updateLabel :: (X86.Label -> X86.Label) -> Env -> Env
 updateLabel f env = env { label = f ( label env)}
 
-updateTempReg :: (Int -> Int) -> Env -> Env
+updateTempReg :: ([X86.Val] -> [X86.Val]) -> Env -> Env
 updateTempReg f env = env { tempReg = f ( tempReg env)}
+
+updateDTempReg :: (Int -> Int) -> Env -> Env
+updateDTempReg f env = env { dTempReg = f ( dTempReg env)}
 
 updateGlobalData :: ([X86.Instruction] -> [X86.Instruction]) -> Env -> Env
 updateGlobalData f env = env { globalData = f (globalData env) }
@@ -240,73 +266,124 @@ compileStm s = do
             exitBlock
         (Decl t i) -> do
             for i
+            resetTempReg
                 where for (item:[]) = declHelper item t
                       for (item:items)= declHelper item t >> for items
         (Ass e1@(ETyped (EVar id) _) expr@(ETyped e t)) -> do
             e1' <- compileExp e1
             e2' <- compileExp expr
-            emit $ X86.Move2 (typeToItype t) e1' e2'           
+            let b2 = isMemoryVar e2'
+            case t of
+                Doub -> do
+                    emit $ X86.Fxch e2'
+                    emit $ X86.Fst e1'
+                    emit $ X86.Fxch e2'
+                _    -> do
+                    case b2 of
+                        True -> do
+                            emit $ X86.Move (X86.VVal "eax") e2'
+                            emit $ X86.Move2 (typeToItype t) e1' (X86.VVal "eax")            
+                        False -> do
+                            emit $ X86.Move2 (typeToItype t) e1' e2'
+            resetTempReg           
         (Incr id) -> undefined --do
         (Decr id) -> undefined --do
         (Ret expr@(ETyped e t)) -> do
             expr' <- compileExp expr
             emit $ X86.Move (X86.VVal "eax") expr'
-            emit $ X86.Return           
+            emit $ X86.Return 
+            resetTempReg          
         (VRet) -> emit $ X86.Return 
         (Cond expr@(ETyped e' t) stm) -> do
             l1 <- getNextLabel
             expr' <- compileExp expr 
-            emit $ X86.CondB expr' l1
+            let b1 = isMemoryVar expr'
+            case b1 of
+                True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
+                False -> emit $ X86.Compare expr' (X86.VInt 0)
+            emit $ X86.CondB (X86.VVal "je") l1
             compileStm stm
             emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+            resetTempReg
         (CondElse expr@(ETyped e' t) stm1 stm2) -> do
             l1 <- getNextLabel
             l2 <- getNextLabel
             expr' <- compileExp expr 
-            emit $ X86.CondB expr' l1
+            let b1 = isMemoryVar expr'
+            case b1 of
+                True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
+                False -> emit $ X86.Compare expr' (X86.VInt 0)
+            emit $ X86.CondB (X86.VVal "je") l2
             compileStm stm1
             emit $ X86.Goto l2
             emit $ X86.Raw $ "L" ++ show l1 ++ ":"
             compileStm stm2
             emit $ X86.Raw $ "L" ++ show l2 ++ ":"
+            resetTempReg
         (While expr@(ETyped e' t) stm) -> do
             l1 <- getNextLabel
             l2 <- getNextLabel
             emit $ X86.Raw $ "L" ++ show l1 ++ ":"
             expr' <- compileExp expr 
-            emit $ X86.Move (X86.VVal "eax") expr'
-            emit $ X86.Compare (X86.VVal "eax") (X86.VInt 0)
+            let b1 = isMemoryVar expr'
+            case b1 of
+                True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
+                False -> emit $ X86.Compare expr' (X86.VInt 0)
             emit $ X86.CondB (X86.VVal "je") l2
             compileStm stm
             emit $ X86.Goto l1
             emit $ X86.Raw $ "L" ++ show l2 ++ ":"
+            resetTempReg
         (SExp expr) -> do
             compileExp expr
+            resetTempReg
             return ()
 
 -- Compiles a expression
 compileExp :: Expr -> CodeGen X86.Val
-compileExp (ETyped (ELitTrue) t) = return $ X86.VInt 1
-compileExp (ETyped (ELitFalse) t) = return $ X86.VInt 0
-compileExp (ETyped (ELitInt i) t) = return $ X86.VInt i
-compileExp (ETyped (ELitDoub d) t) = return $ X86.VDoub d
+compileExp (ETyped (ELitTrue) t) = do
+    r <- getNextTempReg t
+    emit $ X86.Move r (X86.VInt 1)
+    return $ r
+compileExp (ETyped (ELitFalse) t) = do
+    r <- getNextTempReg t
+    emit $ X86.Move r (X86.VInt 0)
+    return $ r
+compileExp (ETyped (ELitInt i) t) = do
+    r <- getNextTempReg t
+    emit $ X86.Move r (X86.VInt i)
+    return $ r
+compileExp (ETyped (ELitDoub d) t) = do
+    r <- getNextTempReg t
+    (X86.VVal nameS) <- addGlobalData t (show d)
+    emit $ X86.Fld (X86.VVal ("["++ nameS++"]"))
+    return $ r
 compileExp (ETyped (EVar id) t) = do
     (v,_)<- lookupVar id
-    return $ v
+    case t of 
+        Doub -> do
+            emit $ X86.Fld v
+            r <- getNextTempReg t
+            return r
+        _      -> return $ v
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     expr' <- mapM compileExp exps
-    mapM (\(x,ETyped e t) -> emit $ X86.Push2 (typeToItype t) x) (zip (reverse expr') (reverse exps))
+    mapM (\(x,ETyped e t) -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
     emit $ X86.Invoke id
     mapM (\x -> emit $ X86.Add (X86.VVal "esp") (X86.VInt 4)) (reverse expr')
     return $ X86.VVal "eax"
 compileExp (ETyped (EString s) t) = do
-    nameS <- addGlobalData s
-    emit $ X86.Push nameS
-    emit $ X86.Invoke "printString"
-    return $ X86.VVal "No!" --TODO Should not return anything?
+    nameS <- addGlobalData t s
+    return $ nameS
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
-    emit $ X86.Neg e'
+    case t of 
+        Doub -> do
+            emit $ X86.Fxch e'
+            emit $ X86.FNeg
+            emit $ X86.Fxch e'
+        _    -> do
+            emit $ X86.Neg e'
     return $ e'
 compileExp (ETyped (Not e) t) = do
     e' <- compileExp e
@@ -316,12 +393,28 @@ compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
     case o of
-        Times -> do
-            emit $ X86.Mul e1' e2'
-            return e1'
+        Times -> do            
+           
+            case t of
+                Doub -> do
+                    emit $ X86.Fxch e1'
+                    emit $ X86.FMul e2'
+                    emit $ X86.Fxch e1'
+                    return e1'
+                _    -> do
+                    r1 <- getNextTempReg t
+                    r2 <- getNextTempReg t
+                    emit $ X86.Move r2 e2'
+                    emit $ X86.Mul r1 r2
+                    return r1
         Div   -> do
-            doDiv e1' e2'        
-            return $ (X86.VVal "eax")
+            case t of 
+                Doub -> do
+                    doFDiv e1' e2'
+                    return e1'
+                _    -> do
+                    doDiv e1' e2'        
+                    return $ (X86.VVal "eax")
         Mod   -> do
             doDiv e1' e2'
             return $ (X86.VVal "edx")     
@@ -329,42 +422,91 @@ compileExp (ETyped (EMul e1 o e2) t) = do
         doDiv e1' e2' = do
             emit $ X86.Move (X86.VVal "edx") (X86.VInt 0)
             emit $ X86.Move2 (typeToItype t) (X86.VVal "eax") e1'
-            case e2' of
-                (X86.VVal s2) -> do
-                    case (s2 !! 0) == '[' of
+            emit $ X86.Div e2'
+            {-case e2' of
+                (X86.VVal _) -> do
+                    case (isMemoryVar e2') of
                         True -> emit $ X86.Div2 (typeToItype t) e2'
                         False -> emit $ X86.Div e2'
                 _ -> do
                     emit $ X86.Move (X86.VVal "ebx") e2'
-                    emit $ X86.Div (X86.VVal "ebx")     
+                    emit $ X86.Div (X86.VVal "ebx")  -}
+        doFDiv e1' e2' = do
+            emit $ X86.Fxch e1'
+            emit $ X86.FDiv e2'
+            emit $ X86.Fxch e1'
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
     e2' <- compileExp e2
-    emit $ X86.Move (X86.VVal "eax") e1'
+    r <- getNextTempReg t
+    --let b1 = isMemoryVar e1'
+    --emit $ X86.Move (X86.VVal "eax") e1'
     case o of 
         Plus  -> do
-            emit $ X86.Add (X86.VVal "eax") e2'
-            return (X86.VVal "eax")
+            case t of 
+                Doub -> do
+                    emit $ X86.Fxch e1'
+                    emit $ X86.FAdd e2'
+                    emit $ X86.Fxch e1'
+                    return e1' 
+                _    -> do
+                    emit $ X86.Move r e1'
+                    emit $ X86.Add r e2'
+                    return r
         Minus -> do
-            emit $ X86.Add (X86.VVal "eax") e2'
-            return (X86.VVal "eax")
+            case t of 
+                Doub -> do
+                    emit $ X86.Fxch e1'
+                    emit $ X86.FSub e2'
+                    emit $ X86.Fxch e1'
+                    return e1' 
+                _    -> do
+                    emit $ X86.Move r e1'
+                    emit $ X86.Sub r e2'
+                    return r
 compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
+    l1 <- getNextLabel
+    l2 <- getNextLabel
     e1' <- compileExp e1
     e2' <- compileExp e2
-    emit $ X86.Compare e1' e2'
+    r <- getNextTempReg t'
+    let b1 = isMemoryVar e1'
+    let b2 = isMemoryVar e2'
+    case t of
+        Doub -> do
+            emit $ X86.Fxch e1'
+            emit $ X86.FCompare e2'
+            emit $ X86.Fxch e1'
+        _ ->  case (b1 || b2) of
+                True -> emit $ X86.Compare2 (typeToItype t) e1' e2'
+                False -> emit $ X86.Compare e1' e2'
     case o of 
-        LTH -> return $ X86.VVal "jge"
-        LE  -> return $ X86.VVal "jg"
-        GTH -> return $ X86.VVal "jle"
-        GE  -> return $ X86.VVal "jl"
-        EQU -> return $ X86.VVal "jne"
-        NE  -> return $ X86.VVal "je"
+        LTH -> emit $ X86.CondB (X86.VVal "jl") l1
+        LE  -> emit $ X86.CondB (X86.VVal "jle") l1 --return $ X86.VVal "jg"
+        GTH -> emit $ X86.CondB (X86.VVal "jg") l1 --return $ X86.VVal "jle"
+        GE  -> emit $ X86.CondB (X86.VVal "jge") l1 --return $ X86.VVal "jl"
+        EQU -> emit $ X86.CondB (X86.VVal "je") l1 --return $ X86.VVal "jne"
+        NE  -> emit $ X86.CondB (X86.VVal "jne") l1 --return $ X86.VVal "je"
+    emit $ X86.Move r (X86.VInt 0)  
+    emit $ X86.Goto l2
+    emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+    emit $ X86.Move r (X86.VInt 1)  
+    emit $ X86.Raw $ "L" ++ show l2 ++ ":"
+    return r
 compileExp (ETyped (EAnd e1 e2) t) = undefined --do
 compileExp (ETyped (EOr e1 e2) t) = undefined --do
 compileExp a = fail $ printTree a
 
 
 -- * Helps functions for the code generator.
+
+isMemoryVar :: X86.Val -> Bool
+isMemoryVar v = case v of
+    (X86.VVal s) -> do 
+        case (s !! 0) == '[' of
+            True -> True
+            False -> False
+    _ -> False  
 
 -- Returns the size of type inside a register.
 getHardwareSizeOfType :: Type -> CodeGen X86.Val
@@ -425,14 +567,23 @@ declHelper (NoInit id) t = do
     sP <- gets stackP
     extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
-    emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
+    case t of 
+        Doub -> do
+            emit $ X86.Fldz 
+            emit $ X86.Fst (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+        _    -> emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
     incStackPointer (typeToNrBytes t)
 declHelper (Init id expr) t = do
     e <- compileExp expr
     sP <- gets stackP
     extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
-    emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
+    case t of 
+        Doub -> do
+            emit $ X86.Fxch e
+            emit $ X86.Fst (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+            emit $ X86.Fxch e 
+        _    -> emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
     incStackPointer (typeToNrBytes t)
 
 

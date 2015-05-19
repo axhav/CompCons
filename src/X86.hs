@@ -12,6 +12,7 @@ data Val
 instance Show Val where
     show = showVal
 
+data Reg = EAX | EBX | ECX | EDX
 
 type Label = Int
 type Var = String
@@ -33,14 +34,21 @@ data Instruction
    -- | Store Size Val Size Val
     | Ass Val Instruction
     | Mul Val Val
+    | FMul Val
     | Div Val
     | Div2 Size Val
+    | FDiv Val
     | Add Val Val
+    | FAdd Val
     | Sub Val Val
+    | FSub Val
     | Neg Val
+    | FNeg
     | Not Val
     | Mod Size Val Val
     | Compare Val Val
+    | Compare2 Size Val Val
+    | FCompare Val
     | And Val Val
     | Or Val Val
     | Return
@@ -49,6 +57,12 @@ data Instruction
     | Comment String
     | Raw String
     | Invoke String 
+    | FFree Int
+    | Fld Val
+    | Fxch Val
+    | Fst Val
+    | Fldz
+    | Fld1
     deriving (Eq)
 
 showInstruction :: Instruction -> String 
@@ -60,34 +74,46 @@ showInstruction (Push2 s v)         = "push " ++ showSize s ++ " " ++ show v
 --showInstruction (Store s1 v1 s2 v2) = "store " ++ showSize s1 ++ " " ++ show v1 ++ " , " ++ showSize s2 ++ "* " ++ show v2 
 showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ showInstruction i
                                         | otherwise = "%" ++ show v1 ++ " = " ++ showInstruction i
---showInstruction (Mul DWord v1 v2)   = "fmul " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Mul v1 v2)         = "imul " ++ show v1 ++ ", " ++ show v2
+showInstruction (FMul v)           = "fmul " ++ show v
 --showInstruction (Div DWord v1 v2)   = "fdiv " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Div v1)            = "idiv " ++ show v1
 showInstruction (Div2 s v1)         = "idiv " ++ showSize s ++ " " ++ show v1
+showInstruction (FDiv v)            = "fdiv " ++ show v
 showInstruction (Add v1 v2)         = "add " ++ show v1 ++ ", " ++ show v2
+showInstruction (FAdd v1)           = "fadd " ++ show v1
 showInstruction (Sub v1 v2)         = "sub " ++ show v1 ++ ", " ++ show v2
+showInstruction (FSub v1)           = "fsub " ++ show v1
 --showInstruction (Neg DWord v)       = "fsub " ++ showSize DWord ++ " 0.0, " ++ show v
 showInstruction (Neg v)             = "neg " ++ show v
+showInstruction (FNeg)              = "fchs"
 showInstruction (Not v)             = "not " ++ show v
 --showInstruction (Mod s v1 v2)       = "srem " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
 --showInstruction (Compare c DWord v1 v2) = "fcmp " ++ (showCond DWord c) ++ " " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Compare v1 v2)     = "cmp " ++ show v1 ++ ", " ++ show v2
+showInstruction (Compare2 s v1 v2)  = "cmp " ++ showSize s ++ " " ++ show v1 ++ ", " ++ show v2
+showInstruction (FCompare v1)       = "fcom "++ show v1 
 showInstruction (And v1 v2)         = "test " ++ show v1 ++ ", " ++ show v2
 showInstruction (Or v1 v2)          = "or " ++ show v1 ++ " , " ++ show v2
 showInstruction (Return)            = "leave \nret" 
 showInstruction (Goto l)            = "jmp L" ++ show l
-showInstruction (CondB c l)       = (showCond c) ++ " L" ++ show l
+showInstruction (CondB c l)         = (showCond c) ++ " L" ++ show l
 showInstruction (Comment s)         = ";" ++ s
 showInstruction (Raw s)             = s
 showInstruction (Invoke f)          = "call " ++ f
+showInstruction (FFree i)           = "ffree st" ++ show i
+showInstruction (Fld v)             = "fld qword " ++ show v
+showInstruction (Fxch v)            = "fxch " ++ show v 
+showInstruction (Fst v)             = "fst qword " ++ show v 
+showInstruction (Fldz)              = "fldz" 
+showInstruction (Fld1)              = "fld1" 
 
 
 showSize :: Size -> String
-showSize Bit        = "i1"
-showSize Byte       = "i8"
+showSize Bit        = "byte"
+showSize Byte       = "byte"
 showSize Word       = "dword"
-showSize DWord      = "TODO"
+showSize DWord      = "qword"
 showSize Void       = "void"
 showSize (SSize s)  = s
 showSize (P s)      = showSize s ++ "*"
