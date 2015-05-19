@@ -513,10 +513,11 @@ compileExp (ETyped (EAnd e1 e2) t) = do
     e1' <- compileExp e1
     r <- getNextTempReg t
     emit $ X86.And e1' (X86.VInt 1)
-    emit $ X86.CondB (X86.VVal "je") l2
+    emit $ X86.CondB (X86.VVal "jz") l1
+    emit $ X86.Move r e1'     --  TODO kolla på detta igen med att pusha till stack eller ngt 
     e2' <- compileExp e2
-    emit $ X86.And e1' e2'
-    emit $ X86.CondB (X86.VVal "je") l2 
+    emit $ X86.And r e2'
+    emit $ X86.CondB (X86.VVal "jnz") l2 
     emit $ X86.Raw $ "L" ++ show l1 ++ ":"
     emit $ X86.Move r (X86.VInt 0)
     emit $ X86.Goto l3
@@ -531,10 +532,11 @@ compileExp (ETyped (EOr e1 e2) t) = do
     e1' <- compileExp e1
     r <- getNextTempReg t
     emit $ X86.And e1' (X86.VInt 0)
-    emit $ X86.CondB (X86.VVal "je") l2 
+    emit $ X86.CondB (X86.VVal "jnz") l2 
+    emit $ X86.Move r e1'     --  TODO kolla på detta igen med att pusha till stack eller ngt 
     e2' <- compileExp e2
-    emit $ X86.Or e1' e2'
-    emit $ X86.CondB (X86.VVal "je") l2 
+    emit $ X86.Or r e2'
+    emit $ X86.CondB (X86.VVal "jnz") l2 
     emit $ X86.Raw $ "L" ++ show l1 ++ ":"
     emit $ X86.Move r (X86.VInt 0)
     emit $ X86.Goto l3
