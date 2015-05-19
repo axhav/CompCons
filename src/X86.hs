@@ -30,6 +30,7 @@ data Instruction
     | Move2 Size Val Val
     | Push Val 
     | Push2 Size Val 
+    | DPush Val 
    -- | Load Size Val
    -- | Store Size Val Size Val
     | Ass Val Instruction
@@ -42,6 +43,8 @@ data Instruction
     | FAdd Val
     | Sub Val Val
     | FSub Val
+    | Inc Size Val
+    | Dec Size Val
     | Neg Val
     | FNeg
     | Not Val
@@ -71,6 +74,7 @@ showInstruction (Move v1 v2)        = "mov " ++ show v1 ++ ", " ++ show v2
 showInstruction (Move2 s v1 v2)     = "mov " ++ showSize s ++ " " ++ show v1 ++ ", " ++ show v2
 showInstruction (Push v)            = "push " ++ show v
 showInstruction (Push2 s v)         = "push " ++ showSize s ++ " " ++ show v
+showInstruction (DPush v)         = "fstp " ++ show v
 --showInstruction (Load s v)          = "load " ++ showSize s ++ "* " ++ show v
 --showInstruction (Store s1 v1 s2 v2) = "store " ++ showSize s1 ++ " " ++ show v1 ++ " , " ++ showSize s2 ++ "* " ++ show v2 
 showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ showInstruction i
@@ -85,6 +89,8 @@ showInstruction (Add v1 v2)         = "add " ++ show v1 ++ ", " ++ show v2
 showInstruction (FAdd v1)           = "fadd " ++ show v1
 showInstruction (Sub v1 v2)         = "sub " ++ show v1 ++ ", " ++ show v2
 showInstruction (FSub v1)           = "fsub " ++ show v1
+showInstruction (Inc s v)            = "inc " ++ showSize s++ " " ++ show v
+showInstruction (Dec s v)            = "dec " ++ showSize s++ " " ++ show v
 --showInstruction (Neg DWord v)       = "fsub " ++ showSize DWord ++ " 0.0, " ++ show v
 showInstruction (Neg v)             = "neg " ++ show v
 showInstruction (FNeg)              = "fchs"

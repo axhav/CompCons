@@ -289,8 +289,27 @@ compileStm s = do
                         False -> do
                             emit $ X86.Move2 (typeToItype t) e1' e2'
             resetTempReg           
-        (Incr id) -> undefined --do
-        (Decr id) -> undefined --do
+        (Incr id) -> do
+            (v,t) <- lookupVar id
+            case t of
+                Doub -> do
+                    emit $ X86.Fld v
+                    emit $ X86.Fld1
+                    emit $ X86.FAdd (X86.VVal "st1")
+                    emit $ X86.Fst v
+                _    -> emit $ X86.Inc (typeToItype t) v
+            resetTempReg
+                    
+        (Decr id) -> do
+            (v,t) <- lookupVar id
+            case t of
+                Doub -> do
+                    emit $ X86.Fld v
+                    emit $ X86.Fld1
+                    emit $ X86.FSub (X86.VVal "st1")
+                    emit $ X86.Fst v
+                _    -> emit $ X86.Dec (typeToItype t) v
+            resetTempReg
         (Ret expr@(ETyped e t)) -> do
             expr' <- compileExp expr
             emit $ X86.Move (X86.VVal "eax") expr'
@@ -374,10 +393,14 @@ compileExp (ETyped (EVar id) t) = do
             return r
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     expr' <- mapM compileExp exps
-    mapM (\(x,ETyped e t) -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
+    mapM (\(x,ETyped e t) -> case t of 
+        Doub -> emit $ X86.DPush x
+        _ -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
     emit $ X86.Invoke id
     mapM (\x -> emit $ X86.Add (X86.VVal "esp") (X86.VInt 4)) (reverse expr')
-    return $ X86.VVal "eax"
+    case t of 
+        Doub -> return $ X86.VVal "st0"
+        _    -> return $ X86.VVal "eax"
 compileExp (ETyped (EString s) t) = do
     nameS <- addGlobalData t s
     emit $ X86.Cld
