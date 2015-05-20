@@ -73,6 +73,16 @@ class Test():
         self.returncode = p.returncode
         self.okCompilation=self.checkCompilation()
         self.okRun = False
+        
+    def compileX86(self,jlc):
+        d = dirname(jlc)
+        if not d:
+            d = '.'
+        p = Popen([join(d,basename(jlc)), self.file, "-x86"], stdout=PIPE, stderr=PIPE, cwd=getcwd())
+        self.output, self.err = p.communicate()
+        self.returncode = p.returncode
+        self.okCompilation=self.checkCompilation()
+        self.okRun = False
 
 def loadTests(testsDir,submission):
    badTestsDir=join(testsDir,"bad")
@@ -98,7 +108,7 @@ class Summary():
        if test.okCompilation:
            good[0]+=1
            total[0]+=1
-           if self.submission=="B" or self.submission=="C":
+           if self.submission=="B" or self.submission=="C" or self.submission=="D":
                total[1]+=1
                if test.okRun:
                    good[1]+=1
@@ -145,10 +155,15 @@ class Summary():
        if self.submission=='A':
            ret+=['Compiled/Total']
            good="%i/%i" % (self.good[0],self.good[2])
-       elif self.submission=='B' or self.submission=='C':
+       elif self.submission=='B' or self.submission=='C': 
+           ret+=['LLVM Tests:']
            ret+=['Run/Compiled/Total']
            good="%i/%i/%i" % (self.good[1],self.good[0],self.good[2])
-
+       elif self.submission=="D":
+           ret+=['x86 Tests:']
+           ret+=['Run/Compiled/Total']
+           good="%i/%i/%i" % (self.good[1],self.good[0],self.good[2])
+    
        bad= "%i/%i" % (self.bad[0],self.bad[2])
        mistakes = len(self.good[3])
        result = '1 mistake found' if mistakes==1 else 'OK' if not mistakes else "%s mistakes found" % mistakes
@@ -165,10 +180,14 @@ class Summary():
             mistakes = len(j[3])
             result = '1 mistake found' if mistakes==1 else 'OK' if not mistakes else "%s mistakes found" % mistakes
             ret+=[i.split(' - ')[1].rjust(c1)+good.rjust(c2)+" <- %s" % (result)]
+                      
 
        total="%i/%i" % (self.total[0],self.total[1])
        ret+=["--"+"-"*c1,"total".rjust(c1)+total.rjust(c2)]
-       ret+= ["",'Failed tests:']+[ "\n - %s\n%s" %(f.file,f.logOutput) for f in fails] if fails else ["","All test passed!"]
+       if self.submission=="D":
+        ret+= ["",'Failed X86 tests:']+[ "\n - %s\n%s" %(f.file,f.logOutput) for f in fails] if fails else ["","All test passed for x86!"]
+       else:
+        ret+= ["",'Failed tests:']+[ "\n - %s\n%s" %(f.file,f.logOutput) for f in fails] if fails else ["","All test passed!"]
 
        return '\n'.join(ret)
 
@@ -185,9 +204,18 @@ def main(jlc,testsDir,submission):
      test.compile(jlc)
      if (submission == "B" or submission == "C") and test.category is not "bad":
         showProgress();
-        test.runGood()
+        test.runGood();
    
    sys.stdout.write("%s\n" % Summary(tests,submission))
+   
+   for test in tests:
+     showProgress();
+     if (submission == "C") and test.category is not "bad":
+        showProgress();
+        test.compileX86(jlc);
+        test.runGood();
+
+   sys.stdout.write("%s\n" % Summary(tests,"D"))        
    
 if __name__ == "__main__":
     parser = OptionParser()
@@ -197,3 +225,4 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     main(options.compiler,options.testsuite,options.submission)
+    
