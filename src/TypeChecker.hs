@@ -76,11 +76,6 @@ checkStm s = case s of
     (Decl t items) -> do
             retItems <- loopHelper t items
             return (Decl t retItems)
-            {-case t of
-        ArrayT t' b ->  do
-            retItems <- loopHelper t' items
-            return (Decl t retItems)
-        _              ->-} 
     (Ass e1 e2) -> do
         case e1 of
             (EVar id) -> do

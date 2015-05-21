@@ -207,15 +207,15 @@ def main(jlc,testsDir,submission):
         test.runGood();
    
    sys.stdout.write("%s\n" % Summary(tests,submission))
-   
-   for test in tests:
-     showProgress();
-     if (submission == "C") and test.category is not "bad":
-        showProgress();
-        test.compileX86(jlc);
-        test.runGood();
+   if (submission == "C"):
+       for test in tests:
+         showProgress();
+         if (submission == "C") and test.category is not "bad":
+            showProgress();
+            test.compileX86(jlc);
+            test.runGood();
 
-   sys.stdout.write("%s\n" % Summary(tests,"D"))        
+       sys.stdout.write("%s\n" % Summary(tests,"D"))        
    
 if __name__ == "__main__":
     parser = OptionParser()

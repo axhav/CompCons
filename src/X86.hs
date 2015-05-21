@@ -30,9 +30,9 @@ data Instruction
     | Move2 Size Val Val
     | Push Val 
     | Push2 Size Val 
-    | DPush Val 
-   -- | Load Size Val
-   -- | Store Size Val Size Val
+    | DPush 
+    | Pop Val
+    | DPop 
     | Ass Val Instruction
     | Mul Val Val
     | FMul Val
@@ -53,6 +53,7 @@ data Instruction
     | Compare2 Size Val Val
     | FCompare Val
     | And Val Val
+    | Test Val Val
     | Or Val Val
     | Return
     | Goto Label
@@ -67,6 +68,7 @@ data Instruction
     | Fldz
     | Fld1
     | Cld
+    | Sahf
     deriving (Eq)
 
 showInstruction :: Instruction -> String 
@@ -74,14 +76,13 @@ showInstruction (Move v1 v2)        = "mov " ++ show v1 ++ ", " ++ show v2
 showInstruction (Move2 s v1 v2)     = "mov " ++ showSize s ++ " " ++ show v1 ++ ", " ++ show v2
 showInstruction (Push v)            = "push " ++ show v
 showInstruction (Push2 s v)         = "push " ++ showSize s ++ " " ++ show v
-showInstruction (DPush v)         = "fstp " ++ show v
---showInstruction (Load s v)          = "load " ++ showSize s ++ "* " ++ show v
---showInstruction (Store s1 v1 s2 v2) = "store " ++ showSize s1 ++ " " ++ show v1 ++ " , " ++ showSize s2 ++ "* " ++ show v2 
+showInstruction (DPush)             = "sub esp, 8 \nfst qword [esp]" 
+showInstruction (Pop v)             = "pop " ++ show v
+showInstruction (DPop)              = "fld qword [esp] \nadd esp,8"
 showInstruction (Ass v1@(VVal v1') i)  | head v1'=='%' =  show v1 ++ " = " ++ showInstruction i
                                         | otherwise = "%" ++ show v1 ++ " = " ++ showInstruction i
 showInstruction (Mul v1 v2)         = "imul " ++ show v1 ++ ", " ++ show v2
-showInstruction (FMul v)           = "fmul " ++ show v
---showInstruction (Div DWord v1 v2)   = "fdiv " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
+showInstruction (FMul v)            = "fmul " ++ show v
 showInstruction (Div v1)            = "idiv " ++ show v1
 showInstruction (Div2 s v1)         = "idiv " ++ showSize s ++ " " ++ show v1
 showInstruction (FDiv v)            = "fdiv " ++ show v
@@ -89,18 +90,16 @@ showInstruction (Add v1 v2)         = "add " ++ show v1 ++ ", " ++ show v2
 showInstruction (FAdd v1)           = "fadd " ++ show v1
 showInstruction (Sub v1 v2)         = "sub " ++ show v1 ++ ", " ++ show v2
 showInstruction (FSub v1)           = "fsub " ++ show v1
-showInstruction (Inc s v)            = "inc " ++ showSize s++ " " ++ show v
-showInstruction (Dec s v)            = "dec " ++ showSize s++ " " ++ show v
---showInstruction (Neg DWord v)       = "fsub " ++ showSize DWord ++ " 0.0, " ++ show v
+showInstruction (Inc s v)           = "inc " ++ showSize s++ " " ++ show v
+showInstruction (Dec s v)           = "dec " ++ showSize s++ " " ++ show v
 showInstruction (Neg v)             = "neg " ++ show v
 showInstruction (FNeg)              = "fchs"
 showInstruction (Not v)             = "not " ++ show v
---showInstruction (Mod s v1 v2)       = "srem " ++ showSize s ++ " " ++ show v1 ++ " , " ++ show v2
---showInstruction (Compare c DWord v1 v2) = "fcmp " ++ (showCond DWord c) ++ " " ++ showSize DWord ++ " " ++ show v1 ++ " , " ++ show v2
 showInstruction (Compare v1 v2)     = "cmp " ++ show v1 ++ ", " ++ show v2
 showInstruction (Compare2 s v1 v2)  = "cmp " ++ showSize s ++ " " ++ show v1 ++ ", " ++ show v2
-showInstruction (FCompare v1)       = "fcom "++ show v1 
-showInstruction (And v1 v2)         = "test " ++ show v1 ++ ", " ++ show v2
+showInstruction (FCompare v1)       = "fcomi "++ show v1 
+showInstruction (And v1 v2)         = "and " ++ show v1 ++ ", " ++ show v2
+showInstruction (Test v1 v2)        = "test " ++ show v1 ++ ", " ++ show v2
 showInstruction (Or v1 v2)          = "or " ++ show v1 ++ " , " ++ show v2
 showInstruction (Return)            = "leave \nret" 
 showInstruction (Goto l)            = "jmp L" ++ show l
@@ -114,7 +113,8 @@ showInstruction (Fxch v)            = "fxch " ++ show v
 showInstruction (Fst v)             = "fst qword " ++ show v 
 showInstruction (Fldz)              = "fldz" 
 showInstruction (Fld1)              = "fld1" 
-showInstruction (Cld)               = "cld" 
+showInstruction (Cld)               = "cld"
+showInstruction (Sahf)              = "sahf"
 
 
 

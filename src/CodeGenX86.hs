@@ -6,6 +6,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Char
+import Numeric
 
 import AbsJavalette
 import PrintJavalette
@@ -142,16 +143,6 @@ resetTempRegExcept v = do
     modify $ updateTempReg (\x -> xs)
     --TODO FIX FOR DOUBLE
     
-        
-
-
--- Returns the register number for a variable.    
-getVarReg :: Ident -> CodeGen X86.Val
-getVarReg id = undefined --do
-
--- Insert new global variable into globalList and return the variable name.
-setNextGlobalVar :: String -> CodeGen X86.Val
-setNextGlobalVar s = undefined --do
 
 -- Adds new global data into list and returns the name of created data
 addGlobalData:: Type-> String -> CodeGen X86.Val
@@ -256,7 +247,14 @@ compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
     emit $ X86.Push (X86.VVal "dword ebp")
     emit $ X86.Move (X86.VVal "ebp") (X86.VVal "esp")
     allocateArgs args
-    compileBlock b
+    case t of
+         Void -> do -- For adding return stament in void functions.
+            case drop ((length ss) - 1) ss of
+                [VRet] -> compileBlock b
+                _      -> do
+                    let b = Block (ss ++ [VRet])
+                    compileBlock b
+         _    -> compileBlock b
     exitBlock
 
 -- Compiles the code for all the statments within a block 
@@ -332,6 +330,7 @@ compileStm s = do
                 True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
                 False -> emit $ X86.Compare expr' (X86.VInt 0)
             emit $ X86.CondB (X86.VVal "je") l1
+            resetTempReg
             compileStm stm
             emit $ X86.Raw $ "L" ++ show l1 ++ ":"
             resetTempReg
@@ -344,9 +343,11 @@ compileStm s = do
                 True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
                 False -> emit $ X86.Compare expr' (X86.VInt 0)
             emit $ X86.CondB (X86.VVal "je") l1
+            resetTempReg
             compileStm stm1
             emit $ X86.Goto l2
             emit $ X86.Raw $ "L" ++ show l1 ++ ":"
+            resetTempReg
             compileStm stm2
             emit $ X86.Raw $ "L" ++ show l2 ++ ":"
             resetTempReg
@@ -360,6 +361,7 @@ compileStm s = do
                 True -> emit $ X86.Compare2 (typeToItype t) expr' (X86.VInt 0)
                 False -> emit $ X86.Compare expr' (X86.VInt 0)
             emit $ X86.CondB (X86.VVal "je") l2
+            resetTempReg
             compileStm stm
             emit $ X86.Goto l1
             emit $ X86.Raw $ "L" ++ show l2 ++ ":"
@@ -385,7 +387,7 @@ compileExp (ETyped (ELitInt i) t) = do
     return $ r
 compileExp (ETyped (ELitDoub d) t) = do
     r <- getNextTempReg t
-    (X86.VVal nameS) <- addGlobalData t (show d)
+    (X86.VVal nameS) <- addGlobalData t (showFFloat Nothing d "")
     emit $ X86.Fld (X86.VVal ("["++ nameS++"]"))
     return $ r
 compileExp (ETyped (EVar id) t) = do
@@ -402,13 +404,19 @@ compileExp (ETyped (EVar id) t) = do
 compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
     expr' <- mapM compileExp exps
     mapM (\(x,ETyped e t) -> case t of 
-        Doub -> emit $ X86.DPush x
+        Doub -> do
+            emit $ X86.Fxch x
+            emit $ X86.DPush
         _ -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
+    let i = sum $ map (\(ETyped _ t) -> (toInteger (typeToNrBytes t))) exps
     emit $ X86.Invoke id
-    mapM (\x -> emit $ X86.Add (X86.VVal "esp") (X86.VInt 4)) (reverse expr')
+    emit $ X86.Add (X86.VVal "esp") (X86.VInt i)
+    
     case t of 
         Doub -> return $ X86.VVal "st0"
-        _    -> return $ X86.VVal "eax"
+        _    -> do
+            resetTempRegExcept (X86.VVal "eax")
+            return $ X86.VVal "eax"
 compileExp (ETyped (EString s) t) = do
     nameS <- addGlobalData t s
     emit $ X86.Cld
@@ -433,41 +441,39 @@ compileExp (ETyped (Not e) t) = do
     r <- getNextTempReg t
     emit $ X86.Move r e'
     emit $ X86.Not r
+    emit $ X86.And r (X86.VInt 1)
     resetTempRegExcept r
     return $ r
 compileExp (ETyped (EMul e1 o e2) t) = do
     e1' <- compileExp e1
-    e2' <- compileExp e2
+    (r, e2')<- pushPop e2 e1' t
     case o of
         Times -> do            
-           
             case t of
                 Doub -> do
-                    emit $ X86.Fxch e1'
+                    emit $ X86.Fxch r
                     emit $ X86.FMul e2'
-                    emit $ X86.Fxch e1'
-                    resetTempRegExcept e1'
-                    return e1'
+                    emit $ X86.Fxch r
+                    return r
                 _    -> do
-                    r1 <- getNextTempReg t
-                    r2 <- getNextTempReg t
-                    emit $ X86.Move r1 e1'
-                    emit $ X86.Move r2 e2'
-                    emit $ X86.Mul r1 r2
-                    resetTempRegExcept r1
-                    return r1
+                    --r1 <- getNextTempReg t
+                    --r2 <- getNextTempReg t
+                    --emit $ X86.Move r1 e1'
+                    --emit $ X86.Move r2 e2'
+                    emit $ X86.Mul r e2'
+                    resetTempRegExcept r
+                    return r
         Div   -> do
             case t of 
                 Doub -> do
-                    doFDiv e1' e2'
-                    resetTempRegExcept e1'
-                    return e1'
+                    doFDiv r e2'
+                    return r
                 _    -> do
-                    doDiv e1' e2'
+                    doDiv r e2'
                     resetTempRegExcept (X86.VVal "eax")       
                     return $ (X86.VVal "eax")
         Mod   -> do
-            doDiv e1' e2'
+            doDiv r e2'
             resetTempRegExcept (X86.VVal "edx")
             return $ (X86.VVal "edx")     
     where
@@ -481,34 +487,31 @@ compileExp (ETyped (EMul e1 o e2) t) = do
             emit $ X86.Fxch e1'
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
-    e2' <- compileExp e2
-    r <- getNextTempReg t
-    --let b1 = isMemoryVar e1'
-    --emit $ X86.Move (X86.VVal "eax") e1'
+    (r, e2')<- pushPop e2 e1' t
+    --r <- getNextTempReg t
     case o of 
         Plus  -> do
             case t of 
                 Doub -> do
-                    emit $ X86.Fxch e1'
+                    emit $ X86.Fxch r
                     emit $ X86.FAdd e2'
-                    emit $ X86.Fxch e1'
-                    resetTempRegExcept e1'
-                    return e1' 
+                    emit $ X86.Fxch r
+                    return r 
                 _    -> do
-                    emit $ X86.Move r e1'
+                    --emit $ X86.Move r e1'
                     emit $ X86.Add r e2'
                     resetTempRegExcept r
                     return r
         Minus -> do
             case t of 
                 Doub -> do
-                    emit $ X86.Fxch e1'
+                    emit $ X86.Fxch r
                     emit $ X86.FSub e2'
-                    emit $ X86.Fxch e1'
-                    resetTempRegExcept e1'
-                    return e1' 
+                    emit $ X86.FNeg
+                    emit $ X86.Fxch r
+                    return r 
                 _    -> do
-                    emit $ X86.Move r e1'
+                    --emit $ X86.Move r e1'
                     emit $ X86.Sub r e2'
                     resetTempRegExcept r
                     return r
@@ -516,18 +519,16 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     l1 <- getNextLabel
     l2 <- getNextLabel
     e1' <- compileExp e1
-    e2' <- compileExp e2
-    r <- getNextTempReg t'
-    let b1 = isMemoryVar e1'
-    let b2 = isMemoryVar e2'
+    (r, e2')<- pushPop e2 e1' t
+    --let b1 = isMemoryVar e1'
+    --let b2 = isMemoryVar e2'
     case t of
         Doub -> do
-            emit $ X86.Fxch e1'
+            emit $ X86.Fxch r
             emit $ X86.FCompare e2'
-            emit $ X86.Fxch e1'
-        _ ->  case (b1 || b2) of
-                True -> emit $ X86.Compare2 (typeToItype t) e1' e2'
-                False -> emit $ X86.Compare e1' e2'
+            emit $ X86.Fxch r
+            --emit $ X86.Sahf
+        _ -> emit $ X86.Compare r e2'
     case o of 
         LTH -> emit $ X86.CondB (X86.VVal "jl") l1
         LE  -> emit $ X86.CondB (X86.VVal "jle") l1 --return $ X86.VVal "jg"
@@ -535,23 +536,25 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
         GE  -> emit $ X86.CondB (X86.VVal "jge") l1 --return $ X86.VVal "jl"
         EQU -> emit $ X86.CondB (X86.VVal "je") l1 --return $ X86.VVal "jne"
         NE  -> emit $ X86.CondB (X86.VVal "jne") l1 --return $ X86.VVal "je"
-    emit $ X86.Move r (X86.VInt 0)  
+    r1 <- getNextTempReg t'
+    emit $ X86.Move r1 (X86.VInt 0)  
     emit $ X86.Goto l2
     emit $ X86.Raw $ "L" ++ show l1 ++ ":"
-    emit $ X86.Move r (X86.VInt 1)  
+    emit $ X86.Move r1 (X86.VInt 1)  
     emit $ X86.Raw $ "L" ++ show l2 ++ ":"
-    resetTempRegExcept r
-    return r
+    resetTempRegExcept r1
+    return r1
 compileExp (ETyped (EAnd e1 e2) t) = do
     l1 <- getNextLabel
     l2 <- getNextLabel
     l3 <- getNextLabel
     e1' <- compileExp e1
-    r <- getNextTempReg t
-    emit $ X86.And e1' (X86.VInt 1)
+    emit $ X86.Test e1' (X86.VInt 1)
     emit $ X86.CondB (X86.VVal "jz") l1
-    emit $ X86.Move r e1'     --  TODO kolla på detta igen med att pusha till stack eller ngt 
+    emit $ X86.Push e1'
     e2' <- compileExp e2
+    r <- getNextTempReg t
+    emit $ X86.Pop r
     emit $ X86.And r e2'
     emit $ X86.CondB (X86.VVal "jnz") l2 
     emit $ X86.Raw $ "L" ++ show l1 ++ ":"
@@ -567,11 +570,12 @@ compileExp (ETyped (EOr e1 e2) t) = do
     l2 <- getNextLabel
     l3 <- getNextLabel
     e1' <- compileExp e1
-    r <- getNextTempReg t
-    emit $ X86.And e1' (X86.VInt 0)
+    emit $ X86.Test e1' (X86.VInt 1)
     emit $ X86.CondB (X86.VVal "jnz") l2 
-    emit $ X86.Move r e1'     --  TODO kolla på detta igen med att pusha till stack eller ngt 
+    emit $ X86.Push e1'     
     e2' <- compileExp e2
+    r <- getNextTempReg t
+    emit $ X86.Pop r
     emit $ X86.Or r e2'
     emit $ X86.CondB (X86.VVal "jnz") l2 
     emit $ X86.Raw $ "L" ++ show l1 ++ ":"
@@ -621,9 +625,9 @@ showE (t:ts) ((X86.VDoub d):ds) = (X86.showSize (typeToItype t)) ++ " " ++ show 
 -- Saves/allocates the arguemnts register onto the stack.
 allocateArgsNr :: [Arg] -> Int -> CodeGen ()
 allocateArgsNr [] i = return ()
-allocateArgsNr [Arg t id] i = extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i))) 
+allocateArgsNr [Arg t id] i = extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i) ++ "]")) 
 allocateArgsNr ((Arg t id):args) i = do
-    extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i)))
+    extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i) ++ "]"))
     allocateArgsNr args (i+typeToNrBytes t)
  
 allocateArgs :: [Arg] -> CodeGen ()
@@ -645,8 +649,27 @@ typeToItype (ArrayT t _) = typeToItype t
 typeToNrBytes :: Type -> Int
 typeToNrBytes Int = 4
 typeToNrBytes Doub = 8
-typeToNrBytes Bool = 1
+typeToNrBytes Bool = 4
+typeToNrBytes Void = 4
 
+pushPop :: Expr -> X86.Val -> Type -> CodeGen (X86.Val, X86.Val)
+pushPop e v t = case t of
+    Doub -> do
+        emit $ X86.Fxch v
+        emit $ X86.DPush
+        emit $ X86.Fxch v
+        e' <- compileExp e
+        resetTempRegExcept e'
+        r <- getNextTempReg t
+        emit $ X86.DPop
+        return (r,e')
+    _    -> do
+        emit $ X86.Push v
+        e' <- compileExp e
+        resetTempRegExcept e'
+        r <- getNextTempReg t
+        emit $ X86.Pop r
+        return (r,e')
         
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
 declHelper :: Item -> Type -> CodeGen ()
@@ -673,9 +696,6 @@ declHelper (Init id expr) t = do
         _    -> emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
     incStackPointer (typeToNrBytes t)
 
-
-    
-    
     
 
    
