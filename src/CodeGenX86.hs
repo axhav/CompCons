@@ -128,7 +128,7 @@ resetTempReg  :: CodeGen ()
 resetTempReg = do
     dt <- gets dTempReg
     case dt > 0 of 
-        True -> loop dt
+        True -> loop (dt-1)
         False -> loop (-1)
     modify $ updateDTempReg (\x -> 0)
     modify $ updateTempReg (\x -> [X86.VVal "eax",X86.VVal "ebx",X86.VVal "ecx",X86.VVal "edx"])
@@ -387,7 +387,7 @@ compileExp (ETyped (ELitInt i) t) = do
     return $ r
 compileExp (ETyped (ELitDoub d) t) = do
     r <- getNextTempReg t
-    (X86.VVal nameS) <- addGlobalData t (showFFloat Nothing d "")
+    (X86.VVal nameS) <- addGlobalData t (show d) --(showFFloat Nothing d "")
     emit $ X86.Fld (X86.VVal ("["++ nameS++"]"))
     return $ r
 compileExp (ETyped (EVar id) t) = do
@@ -451,9 +451,9 @@ compileExp (ETyped (EMul e1 o e2) t) = do
         Times -> do            
             case t of
                 Doub -> do
-                    emit $ X86.Fxch r
+                    --emit $ X86.Fxch r
                     emit $ X86.FMul e2'
-                    emit $ X86.Fxch r
+                    --emit $ X86.Fxch r
                     return r
                 _    -> do
                     --r1 <- getNextTempReg t
@@ -493,9 +493,9 @@ compileExp (ETyped (EAdd e1 o e2) t) = do
         Plus  -> do
             case t of 
                 Doub -> do
-                    emit $ X86.Fxch r
+                    --emit $ X86.Fxch r
                     emit $ X86.FAdd e2'
-                    emit $ X86.Fxch r
+                    --emit $ X86.Fxch r
                     return r 
                 _    -> do
                     --emit $ X86.Move r e1'
@@ -505,10 +505,10 @@ compileExp (ETyped (EAdd e1 o e2) t) = do
         Minus -> do
             case t of 
                 Doub -> do
-                    emit $ X86.Fxch r
+                    --emit $ X86.Fxch r
                     emit $ X86.FSub e2'
-                    emit $ X86.FNeg
-                    emit $ X86.Fxch r
+                    --emit $ X86.FNeg
+                    --emit $ X86.Fxch r
                     return r 
                 _    -> do
                     --emit $ X86.Move r e1'
@@ -524,11 +524,12 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     --let b2 = isMemoryVar e2'
     case t of
         Doub -> do
-            emit $ X86.Fxch r
+            --emit $ X86.Fxch r
             emit $ X86.FCompare e2'
-            emit $ X86.Fxch r
-            --emit $ X86.Sahf
-        _ -> emit $ X86.Compare r e2'
+            --emit $ X86.Fxch r
+            resetTempReg
+        _ ->do
+            emit $ X86.Compare r e2'
     case o of 
         LTH -> emit $ X86.CondB (X86.VVal "jl") l1
         LE  -> emit $ X86.CondB (X86.VVal "jle") l1 --return $ X86.VVal "jg"
@@ -658,11 +659,13 @@ pushPop e v t = case t of
         emit $ X86.Fxch v
         emit $ X86.DPush
         emit $ X86.Fxch v
+        resetTempReg
         e' <- compileExp e
         resetTempRegExcept e'
         r <- getNextTempReg t
         emit $ X86.DPop
-        return (r,e')
+        --emit $ X86.Fxch r      -- Med denna funkar 18 men inte 30 utan funkar 30 men inte 18 ......
+        return (e',r)
     _    -> do
         emit $ X86.Push v
         e' <- compileExp e
@@ -680,7 +683,9 @@ declHelper (NoInit id) t = do
     case t of 
         Doub -> do
             emit $ X86.Fldz 
+            getNextTempReg t
             emit $ X86.Fst (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+            resetTempReg
         _    -> emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
     incStackPointer (typeToNrBytes t)
 declHelper (Init id expr) t = do
