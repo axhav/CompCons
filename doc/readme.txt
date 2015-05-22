@@ -19,10 +19,6 @@ NOTES:
         - Test that function can return multi-arrays and that passing a 
           multi-arrays to a function works.
           
-    We have modified the test file Test.py. The test file can now test x86.
-    When passing the -C flag, x86 will be compiled and tested with the test for 
-    submission B.
-
 Extension:
     - Single array with foreach.
     - Multi arrays.
