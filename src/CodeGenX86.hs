@@ -143,6 +143,13 @@ resetTempRegExcept v = do
     modify $ updateTempReg (\x -> xs)
     --TODO FIX FOR DOUBLE
     
+setDoubleTempTo0 :: CodeGen()
+setDoubleTempTo0 = do
+    dt <- gets dTempReg 
+    modify $ updateDTempReg (\x -> 1)
+    where 
+        loop 1 = emit $ X86.FFree 1
+        loop i = emit (X86.FFree i) >> loop (i-1)
 
 -- Adds new global data into list and returns the name of created data
 addGlobalData:: Type-> String -> CodeGen X86.Val
@@ -316,12 +323,13 @@ compileStm s = do
                 _    -> emit $ X86.Dec (typeToItype t) v
             resetTempReg
         (Ret expr@(ETyped e t)) -> do
+            resetTempReg
             expr' <- compileExp expr
             case t of
                 Doub -> emit $ X86.Fxch expr'
                 _    -> emit $ X86.Move (X86.VVal "eax") expr'
+            setDoubleTempTo0  
             emit $ X86.Return 
-            resetTempReg          
         (VRet) -> emit $ X86.Return 
         (Cond expr@(ETyped e' t) stm) -> do
             l1 <- getNextLabel
@@ -410,6 +418,7 @@ compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
             emit $ X86.DPush
         _ -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
     let i = sum $ map (\(ETyped _ t) -> (toInteger (typeToNrBytes t))) exps
+    resetTempReg
     emit $ X86.Invoke id
     emit $ X86.Add (X86.VVal "esp") (X86.VInt i)
     
@@ -497,6 +506,7 @@ compileExp (ETyped (EAdd e1 o e2) t) = do
                     --emit $ X86.Fxch r
                     emit $ X86.FAdd e2'
                     --emit $ X86.Fxch r
+                    setDoubleTempTo0 
                     return r 
                 _    -> do
                     --emit $ X86.Move r e1'
@@ -662,7 +672,7 @@ pushPop e v t = case t of
         emit $ X86.Fxch v
         resetTempReg
         e' <- compileExp e
-        resetTempRegExcept e'
+        --resetTempRegExcept e'
         r <- getNextTempReg t
         emit $ X86.DPop
         --emit $ X86.Fxch r      -- Med denna funkar 18 men inte 30 utan funkar 30 men inte 18 ......
