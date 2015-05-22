@@ -278,7 +278,6 @@ compileStm s = do
                 where for (item:[]) = declHelper item t
                       for (item:items)= declHelper item t >> for items
         (Ass e1@(ETyped (EVar id) _) expr@(ETyped e t)) -> do
-            --e1' <- compileExp e1 --e1 alltid en id
             (v,_)<- lookupVar id
             e2' <- compileExp expr
             let b2 = isMemoryVar e2'
@@ -318,7 +317,9 @@ compileStm s = do
             resetTempReg
         (Ret expr@(ETyped e t)) -> do
             expr' <- compileExp expr
-            emit $ X86.Move (X86.VVal "eax") expr'
+            case t of
+                Doub -> emit $ X86.Fxch expr'
+                _    -> emit $ X86.Move (X86.VVal "eax") expr'
             emit $ X86.Return 
             resetTempReg          
         (VRet) -> emit $ X86.Return 
