@@ -34,7 +34,7 @@ type Contexts = [VarContext]
 -- | Variables in scope (symbol table)
 data VarContext = VarContext
   { vars :: Map Ident (X86.Val,Type)
-  , next :: X86.Val
+  , next :: Int
   }
 
 type Sig = Map Ident TopDef
@@ -63,7 +63,7 @@ newBlock = do
     case cont of
         [] -> modify $ updateContexts $ (emptyContext :)
         _ ->do
-            let c@VarContext{next=(X86.VInt n)} = head cont
+            let c@VarContext{next=n} = head cont
             modify $ updateContexts $ (almostemptyContext (n) :)
 
 -- Ends current block.
@@ -81,8 +81,8 @@ exitBlock = do
 
 extendContext :: Ident -> Type -> CodeGen ()
 extendContext x t = modify $ updateContexts $ \ (b : bs) ->
-  b { vars = Map.insert x (next b,t) (vars b)
-    , next = (valAdd (next b) 1)
+  b { vars = Map.insert x ((X86.VVal ("[ebp-"++ show ((typeToNrBytes t) + (next b)) ++ "]")),t) (vars b)
+    , next = (valAdd (next b) (typeToNrBytes t))
     } : bs
     
 extendContextvVal :: Ident -> Type -> X86.Val -> CodeGen ()
@@ -91,8 +91,8 @@ extendContextvVal id t v = modify $ updateContexts $ \ (b : bs) ->
     } : bs
 
 -- Increment reg/label counter.    
-valAdd :: X86.Val -> Integer -> X86.Val
-valAdd (X86.VInt i) i1 = X86.VInt (i+i1)
+valAdd :: Int -> Int -> Int
+valAdd i i1 = (i+i1)
 
 extendEnvSig :: TopDef -> CodeGen () 
 extendEnvSig def@(FnDef _t i _args _ss) = modify $ updateEnvSig i def
@@ -128,7 +128,7 @@ resetTempReg  :: CodeGen ()
 resetTempReg = do
     dt <- gets dTempReg
     case dt > 0 of 
-        True -> loop (dt-1)
+        True -> loop (dt)
         False -> loop (-1)
     modify $ updateDTempReg (\x -> 0)
     modify $ updateTempReg (\x -> [X86.VVal "eax",X86.VVal "ebx",X86.VVal "ecx",X86.VVal "edx"])
@@ -141,13 +141,16 @@ resetTempRegExcept :: X86.Val -> CodeGen ()
 resetTempRegExcept v = do
     let xs = filter (\x -> x /= v) [X86.VVal "eax", X86.VVal "ebx", X86.VVal "ecx", X86.VVal "edx"]
     modify $ updateTempReg (\x -> xs)
-    --TODO FIX FOR DOUBLE
     
 setDoubleTempTo0 :: CodeGen()
 setDoubleTempTo0 = do
     dt <- gets dTempReg 
+    case dt > 0 of 
+        True -> loop (dt)
+        False -> loop (-1)
     modify $ updateDTempReg (\x -> 1)
     where 
+        loop (-1) = return ()
         loop 1 = emit $ X86.FFree 1
         loop i = emit (X86.FFree i) >> loop (i-1)
 
@@ -218,13 +221,13 @@ updateStackP f env = env { stackP = f ( stackP env)}
 emptyContext :: VarContext
 emptyContext = VarContext
   { vars = Map.empty
-  , next = X86.VInt 0
+  , next = 0
   }
 
-almostemptyContext :: Integer -> VarContext
+almostemptyContext :: Int -> VarContext
 almostemptyContext i = VarContext
   { vars = Map.empty
-  , next = X86.VInt i
+  , next = i
   }
 
 
@@ -253,6 +256,7 @@ compileDef (FnDef t id'@(Ident id) args b@(Block ss)) = do
     emit $ X86.Raw $ id ++ ":"
     emit $ X86.Push (X86.VVal "dword ebp")
     emit $ X86.Move (X86.VVal "ebp") (X86.VVal "esp")
+    resetTempReg
     allocateArgs args
     case t of
          Void -> do -- For adding return stament in void functions.
@@ -418,8 +422,13 @@ compileExp (ETyped (EApp id'@(Ident id) exps) t) = do
             emit $ X86.DPush
         _ -> emit $ X86.Push x) (zip (reverse expr') (reverse exps))
     let i = sum $ map (\(ETyped _ t) -> (toInteger (typeToNrBytes t))) exps
-    resetTempReg
+    case t of
+        Void -> blank
+        _    -> resetTempReg
     emit $ X86.Invoke id
+    case t of 
+        Doub -> setDoubleTempTo0
+        _    -> resetTempRegExcept (X86.VVal "eax")  
     emit $ X86.Add (X86.VVal "esp") (X86.VInt i)
     
     case t of 
@@ -518,6 +527,7 @@ compileExp (ETyped (EAdd e1 o e2) t) = do
                 Doub -> do
                     --emit $ X86.Fxch r
                     emit $ X86.FSub e2'
+                    --setDoubleTempTo0
                     --emit $ X86.FNeg
                     --emit $ X86.Fxch r
                     return r 
@@ -538,6 +548,7 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
             --emit $ X86.Fxch r
             emit $ X86.FCompare e2'
             --emit $ X86.Fxch r
+            --setDoubleTempTo0
             resetTempReg
         _ ->do
             emit $ X86.Compare r e2'
@@ -669,7 +680,7 @@ pushPop e v t = case t of
     Doub -> do
         emit $ X86.Fxch v
         emit $ X86.DPush
-        emit $ X86.Fxch v
+        --emit $ X86.Fxch v
         resetTempReg
         e' <- compileExp e
         --resetTempRegExcept e'
@@ -688,28 +699,32 @@ pushPop e v t = case t of
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
 declHelper :: Item -> Type -> CodeGen ()
 declHelper (NoInit id) t = do
-    sP <- gets stackP
-    extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+    --Contexts{next=sP}:xs <- gets context--stackP
+    --extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+    extendContext id t
+    (sP,_) <- lookupVar id
+    --fail $ show sP
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
     case t of 
         Doub -> do
             emit $ X86.Fldz 
             getNextTempReg t
-            emit $ X86.Fst (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+            emit $ X86.Fst sP
             resetTempReg
-        _    -> emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) (X86.VInt 0)
+        _    -> emit $ X86.Move2 (typeToItype t) sP (X86.VInt 0)
     incStackPointer (typeToNrBytes t)
 declHelper (Init id expr) t = do
     e <- compileExp expr
-    sP <- gets stackP
-    extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+    extendContext id t
+    (sP,_) <- lookupVar id
+    --extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
     case t of 
         Doub -> do
             emit $ X86.Fxch e
-            emit $ X86.Fst (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
+            emit $ X86.Fst sP
             emit $ X86.Fxch e 
-        _    -> emit $ X86.Move2 (typeToItype t) (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]")) e
+        _    -> emit $ X86.Move2 (typeToItype t) sP e
     incStackPointer (typeToNrBytes t)
 
     

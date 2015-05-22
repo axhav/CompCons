@@ -20,7 +20,7 @@ void incFstIndex (double [][] a){
     a[0][0] = a[0][0] + 1.0;
 }
 
-// test that functions can return array types correct.
+// Test that functions can return array types correct.
 double [][] createNewArray (double [][] a){
     double [][] res = new double [a . length][a[0].length];
 
