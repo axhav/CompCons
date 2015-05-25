@@ -276,7 +276,13 @@ compileStm s = do
                 (ETyped (EVar id) _) -> do
                     r <- getVarReg id
                     e' <- compileExp expr
-                    emit $ LLVM.Store (argTy t) e' (argTy t) r
+                    case t of
+                        (ArrayT t' b') -> do
+                            r1 <- getNextTempReg
+                            let tS = (LLVM.SSize ((LLVM.showSize (bracketToArrT b' t')) ++ "Struct"))
+                            emit $ LLVM.Ass r1 (LLVM.Load tS e')
+                            emit $ LLVM.Store tS r1 tS r
+                        _ -> emit $ LLVM.Store (argTy t) e' (argTy t) r
                 (ETyped (EIndex (ETyped (EVar id) _) b) t') -> do
                     (_,ArrayT t' b') <- lookupVar id
                     r <- getVarReg id
@@ -796,7 +802,7 @@ declHelper (NoInit id) t = do
     case t of 
         (ArrayT t' b') -> do
             setNextGlobalArr t' b'
-            emit $ LLVM.Ass r (LLVM.Alloca (argTy t))--(LLVM.SSize ((LLVM.showSize (bracketToArrT b' t')) ++ "Struct")))
+            emit $ LLVM.Ass r (LLVM.Alloca (LLVM.SSize ((LLVM.showSize (bracketToArrT b' t')) ++ "Struct")))--(argTy t))--(LLVM.SSize ((LLVM.showSize (bracketToArrT b' t')) ++ "Struct")))
         _ -> do
             emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
             case t of    
