@@ -74,8 +74,14 @@ checkStm s = case s of
         exitBlock
         return (BStmt b')  
     (Decl t items) -> do
-            retItems <- loopHelper t items
-            return (Decl t retItems)
+        case t of
+            (ArrayT id br)-> do 
+                checkEmptyBracket br
+                retItems <- loopHelper t items
+                return (Decl t retItems)
+            _ -> do 
+                retItems <- loopHelper t items
+                return (Decl t retItems)
     (Ass e1 e2) -> do
         case e1 of
             (EVar id) -> do
@@ -278,9 +284,12 @@ inferBracket b1 = case b1 of
         b' <- inferBracket b
         return (Brackets expr b')
     (NoBracket e) -> do
-        expr@[(ETyped e t)] <- mapM inferExp e
-        unless (t == Int) $ fail $ "Expected type int but found type " ++ printTree t
-        return (NoBracket expr)
+        expr <- mapM inferExp e
+        case expr of
+            [(ETyped e t)] -> do
+                unless (t == Int) $ fail $ "Expected type int but found type " ++ (printTree t)
+                return (NoBracket expr)
+            _ -> fail $ "Unexpected empty bracket in"
       
 emptyBracket :: Bracket -> EnvM Bracket
 emptyBracket (NoBracket e) = return (NoBracket [])
@@ -296,6 +305,16 @@ emptyBracketNumber t b1@(Brackets e' b') b2 = case b2 of
         ret <- emptyBracketNumber t b' b
         return ret   
 
+checkEmptyBracket :: Bracket -> EnvM ()
+checkEmptyBracket (NoBracket e) = case e of
+    [] -> return ()
+    _ -> fail $ "Expected empty bracket"
+checkEmptyBracket (Brackets e b) = case e of
+    [] -> do    
+        ret <- checkEmptyBracket b
+        return ret
+    _ -> fail $ "Expected empty bracket"
+        
 -- Help function to find the type of an array.    
 findArrType:: Type -> Type
 findArrType Int = Int 

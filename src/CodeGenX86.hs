@@ -400,7 +400,7 @@ compileExp (ETyped (ELitInt i) t) = do
     return $ r
 compileExp (ETyped (ELitDoub d) t) = do
     r <- getNextTempReg t
-    (X86.VVal nameS) <- addGlobalData t (show d) --(showFFloat Nothing d "")
+    (X86.VVal nameS) <- addGlobalData t (show d)
     emit $ X86.Fld (X86.VVal ("["++ nameS++"]"))
     return $ r
 compileExp (ETyped (EVar id) t) = do
@@ -470,15 +470,9 @@ compileExp (ETyped (EMul e1 o e2) t) = do
         Times -> do            
             case t of
                 Doub -> do
-                    --emit $ X86.Fxch r
                     emit $ X86.FMul e2'
-                    --emit $ X86.Fxch r
                     return r
                 _    -> do
-                    --r1 <- getNextTempReg t
-                    --r2 <- getNextTempReg t
-                    --emit $ X86.Move r1 e1'
-                    --emit $ X86.Move r2 e2'
                     emit $ X86.Mul r e2'
                     resetTempRegExcept r
                     return r
@@ -507,32 +501,23 @@ compileExp (ETyped (EMul e1 o e2) t) = do
 compileExp (ETyped (EAdd e1 o e2) t) = do
     e1' <- compileExp e1
     (r, e2')<- pushPop e2 e1' t
-    --r <- getNextTempReg t
     case o of 
         Plus  -> do
             case t of 
                 Doub -> do
-                    --emit $ X86.Fxch r
                     emit $ X86.FAdd e2'
-                    --emit $ X86.Fxch r
                     setDoubleTempTo0 
                     return r 
                 _    -> do
-                    --emit $ X86.Move r e1'
                     emit $ X86.Add r e2'
                     resetTempRegExcept r
                     return r
         Minus -> do
             case t of 
                 Doub -> do
-                    --emit $ X86.Fxch r
                     emit $ X86.FSub e2'
-                    --setDoubleTempTo0
-                    --emit $ X86.FNeg
-                    --emit $ X86.Fxch r
                     return r 
                 _    -> do
-                    --emit $ X86.Move r e1'
                     emit $ X86.Sub r e2'
                     resetTempRegExcept r
                     return r
@@ -541,24 +526,19 @@ compileExp (ETyped (ERel e1@(ETyped e1' t) o e2) t') = do
     l2 <- getNextLabel
     e1' <- compileExp e1
     (r, e2')<- pushPop e2 e1' t
-    --let b1 = isMemoryVar e1'
-    --let b2 = isMemoryVar e2'
     case t of
         Doub -> do
-            --emit $ X86.Fxch r
             emit $ X86.FCompare e2'
-            --emit $ X86.Fxch r
-            --setDoubleTempTo0
             resetTempReg
         _ ->do
             emit $ X86.Compare r e2'
     case o of 
         LTH -> emit $ X86.CondB (X86.VVal "jl") l1
-        LE  -> emit $ X86.CondB (X86.VVal "jle") l1 --return $ X86.VVal "jg"
-        GTH -> emit $ X86.CondB (X86.VVal "jg") l1 --return $ X86.VVal "jle"
-        GE  -> emit $ X86.CondB (X86.VVal "jge") l1 --return $ X86.VVal "jl"
-        EQU -> emit $ X86.CondB (X86.VVal "je") l1 --return $ X86.VVal "jne"
-        NE  -> emit $ X86.CondB (X86.VVal "jne") l1 --return $ X86.VVal "je"
+        LE  -> emit $ X86.CondB (X86.VVal "jle") l1
+        GTH -> emit $ X86.CondB (X86.VVal "jg") l1 
+        GE  -> emit $ X86.CondB (X86.VVal "jge") l1
+        EQU -> emit $ X86.CondB (X86.VVal "je") l1 
+        NE  -> emit $ X86.CondB (X86.VVal "jne") l1
     r1 <- getNextTempReg t'
     emit $ X86.Move r1 (X86.VInt 0)  
     emit $ X86.Goto l2
@@ -622,16 +602,6 @@ isMemoryVar v = case v of
             False -> False
     _ -> False  
 
--- Returns the size of type inside a register.
-getHardwareSizeOfType :: Type -> CodeGen X86.Val
-getHardwareSizeOfType t = undefined --do
-
--- Generats and returns the code for the arguments to a code block/method.
-showA :: [Arg] -> CodeGen String
-showA []           = return ""
-showA ([Arg t id]) = undefined --do
-showA ((Arg t id):ids) = undefined --do
-
 
 -- Generats and returns the code for the arguments/input variables for method calls
 showE :: [Type] -> [X86.Val] ->  String
@@ -653,6 +623,7 @@ allocateArgsNr ((Arg t id):args) i = do
     extendContextvVal id t (X86.VVal ("[ebp+"++ show ((typeToNrBytes t) + i) ++ "]"))
     allocateArgsNr args (i+typeToNrBytes t)
  
+-- helper function for allocating arguments for functions
 allocateArgs :: [Arg] -> CodeGen ()
 allocateArgs [] = return ()
 allocateArgs [Arg t id] = extendContextvVal id t (X86.VVal "[ebp+8]")
@@ -669,24 +640,24 @@ typeToItype Bool = X86.Bit
 typeToItype Void = X86.Void
 typeToItype (ArrayT t _) = typeToItype t
 
+-- convinience funtion to convert the types to bytes
 typeToNrBytes :: Type -> Int
 typeToNrBytes Int = 4
 typeToNrBytes Doub = 8
 typeToNrBytes Bool = 4
 typeToNrBytes Void = 4
 
+-- Helperfunction to perform a push of the second argument to the stack
+-- and then compile the expression returns two regiesters
 pushPop :: Expr -> X86.Val -> Type -> CodeGen (X86.Val, X86.Val)
 pushPop e v t = case t of
     Doub -> do
         emit $ X86.Fxch v
         emit $ X86.DPush
-        --emit $ X86.Fxch v
         resetTempReg
         e' <- compileExp e
-        --resetTempRegExcept e'
         r <- getNextTempReg t
         emit $ X86.DPop
-        --emit $ X86.Fxch r      -- Med denna funkar 18 men inte 30 utan funkar 30 men inte 18 ......
         return (e',r)
     _    -> do
         emit $ X86.Push v
@@ -699,11 +670,8 @@ pushPop e v t = case t of
 -- Helps declar in the function "compileStm" to decide if variable is Initials or not 
 declHelper :: Item -> Type -> CodeGen ()
 declHelper (NoInit id) t = do
-    --Contexts{next=sP}:xs <- gets context--stackP
-    --extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     extendContext id t
     (sP,_) <- lookupVar id
-    --fail $ show sP
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
     case t of 
         Doub -> do
@@ -717,7 +685,6 @@ declHelper (Init id expr) t = do
     e <- compileExp expr
     extendContext id t
     (sP,_) <- lookupVar id
-    --extendContextvVal id t (X86.VVal ("[ebp-" ++ (show ((typeToNrBytes t)+sP)) ++ "]"))
     emit $ X86.Sub (X86.VVal "esp") (X86.VVal (show (typeToNrBytes t)))
     case t of 
         Doub -> do
