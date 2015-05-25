@@ -279,10 +279,13 @@ inferExp e = case e of
 inferBracket :: Bracket -> EnvM Bracket
 inferBracket b1 = case b1 of
     (Brackets e b) -> do
-        expr@[(ETyped e t)] <- mapM inferExp e
-        unless (t == Int) $ fail $ "Expected type int but found type " ++ printTree t
-        b' <- inferBracket b
-        return (Brackets expr b')
+        expr <- mapM inferExp e
+        case expr of
+            [(ETyped e t)] -> do
+                unless (t == Int) $ fail $ "Expected type int but found type " ++ printTree t
+                b' <- inferBracket b
+                return (Brackets expr b')
+            _ -> fail $ "Unexpected empty bracket in"
     (NoBracket e) -> do
         expr <- mapM inferExp e
         case expr of
