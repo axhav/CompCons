@@ -295,7 +295,7 @@ compileStm s = do
             case t of
                 Doub -> do
                     emit $ X86.Fxch e2'
-                    emit $ X86.Fst v --Maybe works TODO
+                    emit $ X86.Fst v
                     emit $ X86.Fxch e2'
                 _    -> do
                     case b2 of

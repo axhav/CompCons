@@ -793,10 +793,15 @@ declHelper :: Item -> Type -> CodeGen ()
 declHelper (NoInit id) t = do
     extendContext id t
     r <- getVarReg id
-    emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
-    case t of    
-        Doub -> emit $ LLVM.Store (typeToItype t) (LLVM.VDoub 0.0) (typeToItype t) r
-        _    -> emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r
+    case t of 
+        (ArrayT t' b') -> do
+            setNextGlobalArr t' b'
+            emit $ LLVM.Ass r (LLVM.Alloca (argTy t))--(LLVM.SSize ((LLVM.showSize (bracketToArrT b' t')) ++ "Struct")))
+        _ -> do
+            emit $ LLVM.Ass r (LLVM.Alloca (typeToItype t))
+            case t of    
+                Doub -> emit $ LLVM.Store (typeToItype t) (LLVM.VDoub 0.0) (typeToItype t) r
+                _    -> emit $ LLVM.Store (typeToItype t) (LLVM.VInt 0) (typeToItype t) r
 declHelper (Init id expr) t = do
     case expr of
         (ETyped (EArr t1@(ArrayT t e)) t2) -> do
