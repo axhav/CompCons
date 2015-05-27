@@ -246,8 +246,10 @@ inferExp e = case e of
         return (ETyped (EIndex e' b') newB) 
     (EDot e1 e2@(EVar (Ident s))) -> do
         unless (s == "length") $ fail $ --TODO add general
-            "Expected length after do but found " ++ printTree e2
-        e1' <- inferExp e1
+            "Expected length after do but found " ++ printTree e2   
+        e1'@(ETyped _ t) <- inferExp e1
+        unless (t /= Int && t /= Doub && t /= Bool) $ fail $
+            ".length is only supported for array and " ++ printTree e1' ++ " is not array."    
         return (ETyped (EDot e1' e2) Int)
     (Neg expr)      -> do
         ret@(ETyped _ t) <- (inferExp expr)

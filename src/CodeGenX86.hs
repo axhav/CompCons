@@ -440,6 +440,9 @@ compileExp (ETyped (EString s) t) = do
     nameS <- addGlobalData t s
     emit $ X86.Cld
     return $ nameS
+compileExp (ETyped (EDot e1 e2) t) = do 
+    fail "The dot operand with length is not supported in this compile for x86."
+    return $ X86.VVal "Nothing"
 compileExp (ETyped (Neg e) t) = do
     e' <- compileExp e
     case t of 
